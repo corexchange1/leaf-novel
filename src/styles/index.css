@@ -1,0 +1,150 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #101828;
+  background: #f8faf9;
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  min-height: 100%;
+  background: #edeff0;
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  background: #edeff0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.scrollbar-hide {
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.reader-dialogue {
+  color: var(--speaker-color);
+}
+
+.reader-speaker {
+  font-weight: 750;
+}
+
+.reader-speech {
+  font-weight: 520;
+}
+
+.app-dark .app-shell {
+  color: #f8fafc;
+}
+
+.app-dark .app-shell .bg-white {
+  background-color: #111827;
+}
+
+.app-dark .app-shell .bg-app-bg {
+  background-color: #0b111b;
+}
+
+.app-dark .app-shell .text-app-text {
+  color: #f8fafc;
+}
+
+.app-dark .app-shell .text-app-muted {
+  color: #94a3b8;
+}
+
+.app-dark .app-shell .border-app-border {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.app-dark .app-shell .shadow-soft {
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.app-dark .app-shell .bg-app-primarySoft {
+  background-color: rgba(20, 184, 166, 0.14);
+}
+
+.dark-sheet .bg-white {
+  background-color: #111827;
+}
+
+.dark-sheet .bg-app-bg {
+  background-color: #172033;
+}
+
+.dark-sheet .text-app-muted {
+  color: #94a3b8;
+}
+
+.dark-sheet .border-app-border {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.dark-sheet .bg-app-primarySoft {
+  background-color: rgba(20, 184, 166, 0.14);
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slideUp {
+  animation: slideUp 220ms ease-out both;
+}
+
+.animate-slideDown {
+  animation: slideDown 180ms ease-out both;
+}
