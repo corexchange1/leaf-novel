@@ -50,6 +50,12 @@ After the repo is on GitHub, use this raw URL in the app Settings field
 https://raw.githubusercontent.com/<owner>/<repo>/<branch>/public/bundled-stories/manifest.json
 ```
 
+Current production manifest:
+
+```text
+https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public/bundled-stories/manifest.json
+```
+
 The app checks that manifest when opened and every 10 minutes while running.
 Future story/chapter/image updates only need a GitHub push; installed apps will
 pull the new manifest automatically when `Auto update từ GitHub` is enabled.
