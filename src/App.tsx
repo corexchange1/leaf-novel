@@ -563,6 +563,7 @@ function StoryDetailPage({ storyId }: { storyId: string }) {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [importNotice, setImportNotice] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const darkMode = useLibraryStore((state) => state.settings.darkMode);
   const progress = useLibraryStore((state) => state.progress[storyId]);
 
   useEffect(() => {
@@ -590,7 +591,7 @@ function StoryDetailPage({ storyId }: { storyId: string }) {
 
   return (
     <section className="space-y-5 px-5 pb-8 pt-[calc(14px+env(safe-area-inset-top))] md:px-8">
-      <TopBar title={story.title} onBack={() => navigate('/')} right={<><Bookmark size={20} /><Share2 size={20} /></>} />
+      <TopBar title={story.title} darkMode={darkMode} onBack={() => navigate('/')} right={<><Bookmark size={20} /><Share2 size={20} /></>} />
 
       <Cover story={story} className="h-[300px] w-full rounded-[28px] shadow-soft md:h-[420px]" />
 
@@ -610,13 +611,15 @@ function StoryDetailPage({ storyId }: { storyId: string }) {
         <button
           type="button"
           onClick={() => navigate(`/read/${story.id}/1`)}
-          className="min-h-[52px] rounded-button border border-app-border bg-white px-4 text-[17px] font-semibold shadow-soft active:scale-[0.98]"
+          className={`min-h-[52px] rounded-button border border-app-border px-4 text-[17px] font-semibold shadow-soft active:scale-[0.98] ${
+            darkMode ? 'bg-[#111827] text-[#F8FAFC]' : 'bg-white text-app-text'
+          }`}
         >
           Đọc từ đầu
         </button>
       </div>
 
-      <div className="rounded-card border border-app-border bg-white p-4 shadow-soft">
+      <div className={`rounded-card border border-app-border p-4 shadow-soft ${darkMode ? 'bg-[#111827]' : 'bg-white'}`}>
         <input
           ref={fileInputRef}
           type="file"
@@ -636,10 +639,10 @@ function StoryDetailPage({ storyId }: { storyId: string }) {
         {importNotice && <p className="mt-3 text-center text-[13px] font-semibold text-app-muted">{importNotice}</p>}
       </div>
 
-      <InfoCard icon={<BookOpen size={20} />} title="Tóm tắt" text={story.summary} />
-      <InfoCard title="Mô tả" text={story.description} />
+      <InfoCard icon={<BookOpen size={20} />} title="Tóm tắt" text={story.summary} darkMode={darkMode} />
+      <InfoCard title="Mô tả" text={story.description} darkMode={darkMode} />
 
-      <section className="rounded-card bg-white p-4 shadow-soft">
+      <section className={`rounded-card p-4 shadow-soft ${darkMode ? 'bg-[#111827]' : 'bg-white'}`}>
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-[21px] font-semibold">Danh sách chương</h2>
           {progress && (
@@ -654,7 +657,9 @@ function StoryDetailPage({ storyId }: { storyId: string }) {
               type="button"
               key={chapter.filename}
               onClick={() => navigate(`/read/${story.id}/${chapter.number}`)}
-              className="flex min-h-[64px] w-full items-center gap-3 py-3 text-left active:scale-[0.99]"
+              className={`flex min-h-[64px] w-full items-center gap-3 rounded-2xl px-2 py-3 text-left active:scale-[0.99] ${
+                darkMode ? 'text-[#F8FAFC] active:bg-white/5' : 'text-app-text active:bg-app-bg'
+              }`}
             >
               <span className="grid h-10 w-10 place-items-center rounded-2xl bg-app-primarySoft text-app-primaryDark">
                 <BookOpen size={18} />
@@ -671,26 +676,30 @@ function StoryDetailPage({ storyId }: { storyId: string }) {
   );
 }
 
-function TopBar({ title, onBack, right }: { title: string; onBack: () => void; right?: ReactNode }) {
+function TopBar({ title, onBack, right, darkMode = false }: { title: string; onBack: () => void; right?: ReactNode; darkMode?: boolean }) {
   return (
-    <div className="sticky top-0 z-20 -mx-5 flex min-h-14 items-center gap-3 bg-app-bg/90 px-5 backdrop-blur-xl md:-mx-8 md:px-8">
-      <IconButton label="Quay lại" onClick={onBack} className="shadow-none">
+    <div
+      className={`sticky top-0 z-20 -mx-5 flex min-h-14 items-center gap-3 px-5 backdrop-blur-xl md:-mx-8 md:px-8 ${
+        darkMode ? 'bg-[#0B111B]/90 text-[#F8FAFC]' : 'bg-app-bg/90 text-app-text'
+      }`}
+    >
+      <IconButton label="Quay lại" onClick={onBack} className={`shadow-none ${darkMode ? '!border-white/10 !bg-white/10 !text-white' : ''}`}>
         <ArrowLeft size={21} />
       </IconButton>
       <p className="min-w-0 flex-1 truncate text-[16px] font-semibold">{title}</p>
-      {right && <div className="flex items-center gap-2 text-app-text">{right}</div>}
+      {right && <div className={`flex items-center gap-2 ${darkMode ? 'text-[#F8FAFC]' : 'text-app-text'}`}>{right}</div>}
     </div>
   );
 }
 
-function InfoCard({ icon, title, text }: { icon?: ReactNode; title: string; text: string }) {
+function InfoCard({ icon, title, text, darkMode = false }: { icon?: ReactNode; title: string; text: string; darkMode?: boolean }) {
   return (
-    <section className="rounded-card bg-white p-5 shadow-soft">
+    <section className={`rounded-card p-5 shadow-soft ${darkMode ? 'bg-[#111827]' : 'bg-white'}`}>
       <h2 className="mb-3 flex items-center gap-2 text-[21px] font-semibold">
         {icon && <span className="text-app-primaryDark">{icon}</span>}
         {title}
       </h2>
-      <p className="text-[17px] font-medium leading-8 text-[#344054]">{text}</p>
+      <p className={`text-[17px] font-medium leading-8 ${darkMode ? 'text-slate-300' : 'text-[#344054]'}`}>{text}</p>
     </section>
   );
 }
@@ -1122,15 +1131,15 @@ function MePage() {
 
   const syncGithubNow = async () => {
     if (!settings.updateUrl.trim()) {
-      setUpdateNotice('Chưa có GitHub manifest URL.');
+      setUpdateNotice('Chưa có nguồn cập nhật.');
       return;
     }
-    setUpdateNotice('Đang cập nhật từ GitHub...');
+    setUpdateNotice('Đang kiểm tra cập nhật...');
     try {
       const result = await api.syncRemote(settings.updateUrl);
       setUpdateNotice(`Đã cập nhật ${result.storyCount} truyện, ${result.chapterCount} chương.`);
     } catch {
-      setUpdateNotice('Không cập nhật được từ GitHub.');
+      setUpdateNotice('Không cập nhật được.');
     }
   };
 
