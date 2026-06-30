@@ -8,8 +8,8 @@ const root = process.cwd();
 const storiesDir = path.join(root, 'stories');
 const outDir = path.join(root, 'public', 'bundled-stories');
 const updatesDir = path.join(root, 'public', 'updates');
-const appVersionName = '1.7';
-const appVersionCode = 8;
+const appVersionName = '1.8';
+const appVersionCode = 9;
 const releaseBaseUrl = `https://github.com/corexchange1/leaf-novel/releases/download/v${appVersionName}`;
 
 async function exists(filePath) {
@@ -45,6 +45,47 @@ function imageForChapter(entries, chapterNumber) {
       (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.webp'))
     );
   });
+}
+
+function inlineImagesFromContent(content) {
+  const images = new Set();
+  const patterns = [
+    /!\[[^\]]*\]\(([^)]+)\)/g,
+    /\{\{\s*image\s+[^}]*src\s*=\s*["']?([^"'\s}]+)["']?[^}]*\}\}/gi,
+    /<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi,
+  ];
+  for (const pattern of patterns) {
+    for (const match of content.matchAll(pattern)) {
+      const src = match[1]?.trim();
+      if (!src || /^(https?:|data:|blob:|\/)/i.test(src) || src.includes('..')) continue;
+      images.add(src.replace(/^\.?\//, ''));
+    }
+  }
+  return Array.from(images);
+}
+
+async function copyInlineImages(storyId, chapter, chaptersPath, storyOutDir) {
+  chapter.inlineImageFiles = [];
+  for (const relative of inlineImagesFromContent(chapter.content)) {
+    const source = path.join(chaptersPath, relative);
+    if (!(await exists(source))) continue;
+    const publicTarget = path.join(storyOutDir, 'chapters', relative);
+    await fs.mkdir(path.dirname(publicTarget), { recursive: true });
+    await fs.copyFile(source, publicTarget);
+    chapter.inlineImageFiles.push({
+      source: relative,
+      file: `stories/${storyId}/chapters/${relative}`,
+      publicUrl: `/bundled-stories/${storyId}/chapters/${relative}`,
+    });
+  }
+}
+
+function rewritePublicInlineImages(content, chapter) {
+  let next = content;
+  for (const asset of chapter.inlineImageFiles || []) {
+    next = next.split(asset.source).join(asset.publicUrl);
+  }
+  return next;
 }
 
 async function readStory(storyId) {
@@ -83,6 +124,9 @@ async function readStory(storyId) {
       chapter.imageFile = `stories/${storyId}/${image.name}`;
     }
 
+    await copyInlineImages(storyId, chapter, chaptersPath, storyOutDir);
+    chapter.content = rewritePublicInlineImages(chapter.content, chapter);
+
     chapters.push(chapter);
   }
 
@@ -117,9 +161,14 @@ async function addPackAssets(zip, stories) {
     }
 
     for (const chapter of item.chapters) {
-      if (!chapter.imageFile) continue;
-      const imagePath = path.join(storiesDir, storyId, 'chapters', path.basename(chapter.imageFile));
-      if (await exists(imagePath)) zip.file(chapter.imageFile, await fs.readFile(imagePath));
+      if (chapter.imageFile) {
+        const imagePath = path.join(storiesDir, storyId, 'chapters', path.basename(chapter.imageFile));
+        if (await exists(imagePath)) zip.file(chapter.imageFile, await fs.readFile(imagePath));
+      }
+      for (const asset of chapter.inlineImageFiles || []) {
+        const assetPath = path.join(storiesDir, storyId, 'chapters', asset.source);
+        if (await exists(assetPath)) zip.file(asset.file, await fs.readFile(assetPath));
+      }
     }
   }
 }
@@ -134,6 +183,7 @@ function packManifest(stories) {
       },
       chapters: item.chapters.map((chapter) => ({
         ...chapter,
+        content: chapter.content.replaceAll(`/bundled-stories/${item.story.id}/chapters/`, ''),
         imageUrl: chapter.imageFile || chapter.imageUrl,
       })),
     })),

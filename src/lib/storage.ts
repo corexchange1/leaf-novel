@@ -19,18 +19,21 @@ export const defaultReaderSettings: ReaderSettings = {
   background: 'white',
   darkMode: false,
   hideUI: true,
+  dialogueColors: true,
   lineHeight: 1.82,
-  libraryPath: '',
   updateUrl: import.meta.env.VITE_STORY_UPDATE_URL || 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public/updates/stories-index.json',
   autoUpdate: true,
 };
 
 export const defaultStats: ReadingStats = {
-  totalMinutesRead: 7560,
-  todayMinutesRead: 85,
-  weekMinutesRead: 520,
-  monthMinutesRead: 1560,
-  streakDays: 7,
+  totalMinutesRead: 0,
+  todayMinutesRead: 0,
+  weekMinutesRead: 0,
+  monthMinutesRead: 0,
+  streakDays: 0,
+  lastReadDate: '',
+  lastReadWeek: '',
+  lastReadMonth: '',
   readStoryIds: [],
 };
 

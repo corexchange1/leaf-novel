@@ -3,7 +3,6 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import {
   ArrowLeft,
-  Bell,
   Bookmark,
   BookOpen,
   Check,
@@ -11,7 +10,6 @@ import {
   CircleUserRound,
   Clock3,
   Filter,
-  FolderOpen,
   FolderSync,
   Headphones,
   Home,
@@ -32,7 +30,6 @@ import {
 import type { Chapter, ChapterContent, MockUser, ReaderSettings, Story } from './types';
 import { api } from './lib/api';
 import { appInfo } from './lib/appInfo';
-import { pickNativeFolder } from './lib/nativeFolder';
 import { useLibraryStore } from './store/useLibraryStore';
 import { chapterLabel, clamp, formatDateTime, formatMinutes } from './utils/format';
 import { chapterToBlocks } from './utils/markdown';
@@ -415,8 +412,8 @@ function ContinueReadingCard({ story, progress }: { story?: Story; progress?: { 
   }
 
   return (
-    <article className="rounded-[28px] bg-gradient-to-br from-[#E6FAF6] via-white to-[#DDF7F5] p-4 shadow-soft">
-      <div className="mb-3">
+    <article className="continue-card rounded-[28px] bg-gradient-to-br from-[#E6FAF6] via-white to-[#DDF7F5] p-3.5 shadow-soft">
+      <div className="mb-2">
         <div>
           <p className="text-[14px] font-medium uppercase tracking-[0.14em] text-app-primaryDark">Đọc tiếp</p>
           <h2 className="mt-1 text-[22px] font-semibold leading-tight">{story.title}</h2>
@@ -830,35 +827,42 @@ function ReaderPage({ storyId, chapterNumber }: { storyId: string; chapterNumber
 
       <article
         onClick={() => settings.hideUI && setUiVisible((value) => !value)}
-        className={`px-6 pb-[calc(160px+env(safe-area-inset-bottom))] pt-[calc(90px+env(safe-area-inset-top))] md:px-12 md:pb-[calc(180px+env(safe-area-inset-bottom))] ${fontClass}`}
+        className={`px-6 pb-[calc(160px+env(safe-area-inset-bottom))] pt-[calc(90px+env(safe-area-inset-top))] text-justify md:px-12 md:pb-[calc(180px+env(safe-area-inset-bottom))] ${fontClass}`}
         style={{ fontSize: settings.fontSize, lineHeight: settings.lineHeight }}
       >
         {chapter.imageUrl && (
           <img
             src={chapter.imageUrl}
             alt={chapter.title}
-            className="-mx-6 mb-7 h-[270px] w-[calc(100%+3rem)] object-cover md:-mx-12 md:h-[430px] md:w-[calc(100%+6rem)]"
+            className="relative left-1/2 mb-7 h-[270px] w-screen max-w-none -translate-x-1/2 object-cover md:h-[430px]"
             loading="eager"
           />
         )}
         <h1 className="mb-7 text-[1.36em] font-semibold leading-tight">{chapter.title}</h1>
         <div className="space-y-6">
-          {blocks.map((block, index) => (
-            <p
-              key={`${block.text.slice(0, 20)}-${index}`}
-              className={block.type === 'dialogue' ? 'leading-[inherit] reader-dialogue' : 'leading-[inherit]'}
-              style={block.color ? ({ '--speaker-color': block.color } as CSSProperties) : undefined}
-            >
-              {block.type === 'dialogue' && block.speaker ? (
-                <>
-                  <span className="reader-speaker">{block.speaker}:</span>{' '}
-                  <span className="reader-speech">{block.text}</span>
-                </>
-              ) : (
-                block.text
-              )}
-            </p>
-          ))}
+          {blocks.map((block, index) => {
+            if (block.type === 'image') {
+              return <TriggeredImage key={`${block.src}-${index}`} src={block.src} alt={block.alt} effect={block.effect} />;
+            }
+
+            const dialogueClass = block.type === 'dialogue' && settings.dialogueColors ? 'reader-dialogue' : '';
+            return (
+              <p
+                key={`${block.text.slice(0, 20)}-${index}`}
+                className={`leading-[inherit] ${dialogueClass}`}
+                style={block.color && settings.dialogueColors ? ({ '--speaker-color': block.color } as CSSProperties) : undefined}
+              >
+                {block.type === 'dialogue' && block.speaker ? (
+                  <>
+                    <span className="reader-speaker">{block.speaker}:</span>{' '}
+                    <span className="reader-speech">{block.text}</span>
+                  </>
+                ) : (
+                  block.text
+                )}
+              </p>
+            );
+          })}
         </div>
         {showNextChapter && (
           <button
@@ -888,6 +892,40 @@ function ReaderPage({ storyId, chapterNumber }: { storyId: string; chapterNumber
       <ReaderProgressFooter percent={scrollPercent} visible={uiVisible && !showNextChapter} background={settings.background} />
       <ReaderSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </main>
+  );
+}
+
+function TriggeredImage({ src, alt, effect = 'none' }: { src: string; alt: string; effect?: string }) {
+  const ref = useRef<HTMLImageElement | null>(null);
+  const [triggered, setTriggered] = useState(false);
+  const normalizedEffect = effect || 'none';
+
+  useEffect(() => {
+    const image = ref.current;
+    if (!image) return undefined;
+    let timeout = 0;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting || normalizedEffect === 'none') return;
+        window.clearTimeout(timeout);
+        setTriggered(true);
+        if ('vibrate' in navigator) navigator.vibrate?.(normalizedEffect === 'shake' ? [25, 35, 25] : 18);
+        timeout = window.setTimeout(() => setTriggered(false), 1100);
+      },
+      { rootMargin: '18% 0px -8% 0px', threshold: 0.12 },
+    );
+    observer.observe(image);
+    return () => {
+      window.clearTimeout(timeout);
+      observer.disconnect();
+    };
+  }, [normalizedEffect]);
+
+  return (
+    <figure className="reader-image-wrap">
+      <img ref={ref} src={src} alt={alt} loading="lazy" className={`reader-image reader-image--${normalizedEffect} ${triggered ? 'is-triggered' : ''}`} />
+      {alt && <figcaption>{alt}</figcaption>}
+    </figure>
   );
 }
 
@@ -970,6 +1008,12 @@ function ReaderSettingsSheet({ open, onClose }: { open: boolean; onClose: () => 
           checked={settings.darkMode}
           onChange={() => setSettings({ darkMode: !settings.darkMode })}
         />
+        <ToggleRow
+          title="Màu thoại nhân vật"
+          description="Bật/tắt màu riêng cho lời thoại"
+          checked={settings.dialogueColors}
+          onChange={() => setSettings({ dialogueColors: !settings.dialogueColors })}
+        />
         <button
           type="button"
           onClick={() => setSettings({ hideUI: !settings.hideUI })}
@@ -1013,6 +1057,15 @@ function ToggleRow({
         <span className={`h-6 w-6 rounded-full bg-white transition ${checked ? 'translate-x-6' : 'translate-x-0'}`} />
       </span>
     </button>
+  );
+}
+
+function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-card bg-white p-4 shadow-soft">
+      <h2 className="mb-3 text-[20px] font-semibold">{title}</h2>
+      <div className="space-y-2">{children}</div>
+    </section>
   );
 }
 
@@ -1091,45 +1144,12 @@ function MePage() {
   const settings = useLibraryStore((state) => state.settings);
   const setSettings = useLibraryStore((state) => state.setSettings);
   const logout = useLibraryStore((state) => state.logout);
-  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
-  const [pathNotice, setPathNotice] = useState('');
   const [updateNotice, setUpdateNotice] = useState('');
   const [updateApkUrl, setUpdateApkUrl] = useState('');
   const recent = Object.values(progress).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
   if (!user) return null;
-
-  const importFolderFiles = async (files: File[], label: string) => {
-    const result = await api.importFiles(files);
-    setSettings({ libraryPath: label });
-    setPathNotice(`Đã load ${result.chapterCount} file từ ${label}.`);
-  };
-
-  const onFolderChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.currentTarget.files ?? []);
-    event.currentTarget.value = '';
-    if (!files.length) return;
-    const firstPath = files[0].webkitRelativePath || files[0].name;
-    const label = firstPath.split('/').filter(Boolean)[0] || 'Thư mục đã chọn';
-    await importFolderFiles(files, label);
-  };
-
-  const choosePath = async () => {
-    try {
-      const picked = await pickNativeFolder();
-      if (picked) {
-        const result = await api.importRecords(picked.files);
-        setSettings({ libraryPath: picked.path });
-        setPathNotice(`Đã load ${result.chapterCount} file từ ${picked.path}.`);
-        return;
-      }
-    } catch {
-      setPathNotice('Không mở được thư mục đã chọn.');
-      return;
-    }
-    folderInputRef.current?.click();
-  };
 
   const syncGithubNow = async () => {
     if (!settings.updateUrl.trim()) {
@@ -1208,86 +1228,47 @@ function MePage() {
         )}
       </section>
 
-      <section className="rounded-card bg-white p-4 shadow-soft">
-        <h2 className="mb-3 text-[21px] font-semibold">Cài đặt đọc</h2>
-        <input
-          ref={folderInputRef}
-          type="file"
-          accept=".md,.html,.htm,.png,.jpg,.jpeg,.webp,text/markdown,text/html,image/png,image/jpeg,image/webp"
-          multiple
-          className="hidden"
-          onChange={onFolderChange}
-          {...{ webkitdirectory: '', directory: '' }}
-        />
-        <button
-          type="button"
-          onClick={choosePath}
-          className="flex min-h-14 w-full items-center justify-between text-left"
-        >
-          <span className="flex min-w-0 items-center gap-2 font-medium">
-            <FolderOpen size={18} />
-            Path
-          </span>
-          <span className="ml-3 truncate text-[14px] font-medium text-app-muted">{settings.libraryPath || 'Chọn thư mục md/html'}</span>
-        </button>
-        {pathNotice && <p className="pb-3 text-[13px] font-semibold text-app-primaryDark">{pathNotice}</p>}
-        <button
-          type="button"
-          onClick={() => setSettings({ darkMode: !settings.darkMode })}
-          className="flex min-h-14 w-full items-center justify-between text-left"
-        >
-          <span className="font-medium">Dark mode</span>
-          <span className={`flex h-7 w-12 items-center rounded-full p-1 ${settings.darkMode ? 'bg-app-primary' : 'bg-app-border'}`}>
-            <span className={`h-5 w-5 rounded-full bg-white transition ${settings.darkMode ? 'translate-x-5' : ''}`} />
-          </span>
-        </button>
-        <SettingsRow label="Màu nền đọc" value={settings.background} swatch={settings.background} />
-        <SettingsRow label="Kích thước chữ" value={`${settings.fontSize}px`} />
-        <button
-          type="button"
-          onClick={() => setSettings({ autoUpdate: !settings.autoUpdate })}
-          className="flex min-h-14 w-full items-center justify-between border-t border-app-border text-left"
-        >
-          <span className="font-medium">Tự động cập nhật</span>
-          <span className={`flex h-7 w-12 items-center rounded-full p-1 ${settings.autoUpdate ? 'bg-app-primary' : 'bg-app-border'}`}>
-            <span className={`h-5 w-5 rounded-full bg-white transition ${settings.autoUpdate ? 'translate-x-5' : ''}`} />
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={syncGithubNow}
-          className="min-h-[48px] w-full rounded-button bg-app-primarySoft text-[15px] font-semibold text-app-primaryDark"
-        >
-          Kiểm tra cập nhật
-        </button>
-        {updateNotice && <p className="text-[13px] font-semibold text-app-muted">{updateNotice}</p>}
-        {updateApkUrl && (
+      <section className="space-y-3">
+        <SettingsGroup title="Giao diện app">
+          <ToggleRow title="Dark mode" description="Đổi toàn bộ app sang nền tối" checked={settings.darkMode} onChange={() => setSettings({ darkMode: !settings.darkMode })} />
+        </SettingsGroup>
+
+        <SettingsGroup title="Đọc truyện">
+          <SettingsRow label="Màu nền đọc" value={settings.background} swatch={settings.background} />
+          <SettingsRow label="Kích thước chữ" value={`${settings.fontSize}px`} />
+          <ToggleRow title="Ẩn UI khi đọc" description="Ẩn thanh trên/dưới khi chạm trang đọc" checked={settings.hideUI} onChange={() => setSettings({ hideUI: !settings.hideUI })} />
+          <ToggleRow
+            title="Màu thoại nhân vật"
+            description="Bật/tắt màu riêng cho lời thoại"
+            checked={settings.dialogueColors}
+            onChange={() => setSettings({ dialogueColors: !settings.dialogueColors })}
+          />
+        </SettingsGroup>
+
+        <SettingsGroup title="Cập nhật">
+          <ToggleRow title="Tự động cập nhật" description="Tự nhận truyện mới từ GitHub khi mở app" checked={settings.autoUpdate} onChange={() => setSettings({ autoUpdate: !settings.autoUpdate })} />
           <button
             type="button"
-            onClick={() => window.open(updateApkUrl, '_blank')}
-            className="min-h-[48px] w-full rounded-button border border-app-border bg-white text-[15px] font-semibold shadow-soft"
+            onClick={syncGithubNow}
+            className="min-h-[48px] w-full rounded-button bg-app-primarySoft text-[15px] font-semibold text-app-primaryDark"
           >
-            Tải bản app mới
+            Kiểm tra cập nhật
           </button>
-        )}
-        <SettingsRow label="Phiên bản app" value={`v${appInfo.versionName}`} />
-        <button
-          type="button"
-          onClick={() => setSettings({ hideUI: !settings.hideUI })}
-          className="flex min-h-14 w-full items-center justify-between border-t border-app-border text-left"
-        >
-          <span className="font-medium">Ẩn UI khi đọc</span>
-          <span className={`flex h-7 w-12 items-center rounded-full p-1 ${settings.hideUI ? 'bg-app-primary' : 'bg-app-border'}`}>
-            <span className={`h-5 w-5 rounded-full bg-white transition ${settings.hideUI ? 'translate-x-5' : ''}`} />
-          </span>
-        </button>
-        <SettingsRow label="Thông báo cập nhật chương" value="Bật" icon={<Bell size={18} />} />
+          {updateNotice && <p className="text-[13px] font-semibold text-app-muted">{updateNotice}</p>}
+          {updateApkUrl && (
+            <button
+              type="button"
+              onClick={() => window.open(updateApkUrl, '_blank')}
+              className="min-h-[48px] w-full rounded-button border border-app-border bg-white text-[15px] font-semibold shadow-soft"
+            >
+              Tải bản app mới
+            </button>
+          )}
+          <SettingsRow label="Phiên bản app" value={`v${appInfo.versionName}`} />
+        </SettingsGroup>
       </section>
 
       <div className="grid gap-3">
-        <button type="button" className="min-h-[52px] rounded-button bg-app-primarySoft text-[16px] font-semibold text-app-primaryDark">
-          Đồng bộ dữ liệu
-        </button>
         <button type="button" onClick={logout} className="min-h-[52px] rounded-button bg-white text-[16px] font-semibold text-app-danger shadow-soft">
           <LogOut className="mr-2 inline" size={18} />
           Đăng xuất

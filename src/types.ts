@@ -31,8 +31,8 @@ export type ReaderSettings = {
   background: 'white' | 'cream' | 'green' | 'dark';
   darkMode: boolean;
   hideUI: boolean;
+  dialogueColors: boolean;
   lineHeight: number;
-  libraryPath: string;
   updateUrl: string;
   autoUpdate: boolean;
 };
@@ -59,5 +59,8 @@ export type ReadingStats = {
   weekMinutesRead: number;
   monthMinutesRead: number;
   streakDays: number;
+  lastReadDate: string;
+  lastReadWeek: string;
+  lastReadMonth: string;
   readStoryIds: string[];
 };

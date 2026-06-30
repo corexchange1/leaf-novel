@@ -260,6 +260,41 @@ async function dataUrlFromZip(zip: JSZip, path: string | undefined) {
   return `data:${mimeFromPath(path)};base64,${bytesToBase64(bytes)}`;
 }
 
+function isRemoteOrDataUrl(src: string) {
+  return /^(https?:|data:|blob:|\/)/i.test(src);
+}
+
+function resolveChapterAsset(chapter: ChapterContent, src?: string) {
+  if (!src || isRemoteOrDataUrl(src)) return '';
+  const safeSrc = src.replace(/^\.?\//, '');
+  return `stories/${chapter.storyId}/chapters/${safeSrc}`;
+}
+
+async function rewriteInlineImages(content: string, chapter: ChapterContent, zip: JSZip) {
+  const replacements = new Map<string, string>();
+  const patterns = [
+    /!\[[^\]]*\]\(([^)]+)\)/g,
+    /\{\{\s*image\s+[^}]*src\s*=\s*["']?([^"'\s}]+)["']?[^}]*\}\}/gi,
+    /<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of content.matchAll(pattern)) {
+      const src = match[1]?.trim();
+      const assetPath = resolveChapterAsset(chapter, src);
+      if (!src || !assetPath || replacements.has(src)) continue;
+      const dataUrl = await dataUrlFromZip(zip, assetPath);
+      if (dataUrl) replacements.set(src, dataUrl);
+    }
+  }
+
+  let next = content;
+  for (const [src, dataUrl] of replacements) {
+    next = next.split(src).join(dataUrl);
+  }
+  return next;
+}
+
 async function storiesFromPack(buffer: ArrayBuffer): Promise<BundledStory[]> {
   const zip = await JSZip.loadAsync(buffer);
   const manifestFile = zip.file('manifest.json');
@@ -276,10 +311,16 @@ async function storiesFromPack(buffer: ArrayBuffer): Promise<BundledStory[]> {
         coverUrl: (await dataUrlFromZip(zip, item.story.coverUrl)) || item.story.coverUrl,
       },
       chapters: await Promise.all(
-        item.chapters.map(async (chapter) => ({
-          ...chapter,
-          imageUrl: (await dataUrlFromZip(zip, chapter.imageUrl)) || chapter.imageUrl,
-        })),
+        item.chapters.map(async (chapter) => {
+          const normalizedChapter = {
+            ...chapter,
+            imageUrl: (await dataUrlFromZip(zip, chapter.imageUrl)) || chapter.imageUrl,
+          };
+          return {
+            ...normalizedChapter,
+            content: await rewriteInlineImages(chapter.content, normalizedChapter, zip),
+          };
+        }),
       ),
     });
   }
