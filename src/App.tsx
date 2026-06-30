@@ -140,7 +140,7 @@ function App() {
 
 function AppShell({ active, children, darkMode }: { active: Route['name']; children: ReactNode; darkMode: boolean }) {
   return (
-    <main className={`app-shell mx-auto min-h-screen w-full max-w-[480px] overflow-hidden pb-[calc(92px+env(safe-area-inset-bottom))] shadow-[0_0_60px_rgba(16,24,40,0.08)] md:max-w-[860px] md:pb-[calc(104px+env(safe-area-inset-bottom))] ${darkMode ? 'bg-[#0B111B] text-[#F8FAFC]' : 'bg-app-bg'}`}>
+    <main className={`app-shell mx-auto min-h-screen w-full max-w-[480px] overflow-hidden pb-[calc(92px+env(safe-area-inset-bottom))] shadow-[0_0_60px_rgba(16,24,40,0.08)] md:max-w-none md:pb-[calc(104px+env(safe-area-inset-bottom))] ${darkMode ? 'bg-[#0B111B] text-[#F8FAFC]' : 'bg-app-bg'}`}>
       {children}
       <BottomNav active={active} darkMode={darkMode} />
     </main>
@@ -156,7 +156,7 @@ function BottomNav({ active, darkMode }: { active: Route['name']; darkMode: bool
   ] as const;
 
   return (
-    <nav className={`fixed inset-x-0 bottom-0 z-30 mx-auto w-full max-w-[480px] border-t px-3 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl md:max-w-[860px] md:px-8 ${darkMode ? 'border-white/10 bg-[#0B111B]/[0.92]' : 'border-app-border/80 bg-white/[0.92]'}`}>
+    <nav className={`fixed inset-x-0 bottom-0 z-30 mx-auto w-full max-w-[480px] border-t px-3 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl md:max-w-none md:px-8 ${darkMode ? 'border-white/10 bg-[#0B111B]/[0.92]' : 'border-app-border/80 bg-white/[0.92]'}`}>
       <div className="grid grid-cols-4 gap-1">
         {items.map((item) => {
           const Icon = item.icon;
@@ -218,7 +218,7 @@ function LoginPage() {
   };
 
   return (
-    <main className="mx-auto grid min-h-screen w-full max-w-[480px] place-items-center bg-app-bg px-5 md:max-w-[860px] md:px-10">
+    <main className="mx-auto grid min-h-screen w-full max-w-[480px] place-items-center bg-app-bg px-5 md:max-w-none md:px-10">
       <section className="w-full max-w-[520px] rounded-[28px] bg-white p-6 shadow-soft md:p-8">
         <img src="/brand/clover-icon.png" alt="Leaf Novel" className="mx-auto h-20 w-20 object-contain" />
         <h1 className="mt-4 text-center text-[30px] font-semibold leading-tight">Leaf Novel</h1>
@@ -349,7 +349,7 @@ function HomePage() {
       </div>
 
       {searchOpen && (
-        <div className="fixed inset-x-0 top-0 z-50 mx-auto w-full max-w-[480px] bg-app-bg px-5 pb-4 pt-[calc(18px+env(safe-area-inset-top))] shadow-float animate-slideDown md:max-w-[860px] md:px-8">
+        <div className="fixed inset-x-0 top-0 z-50 mx-auto w-full max-w-[480px] bg-app-bg px-5 pb-4 pt-[calc(18px+env(safe-area-inset-top))] shadow-float animate-slideDown md:max-w-none md:px-8">
           <div className="flex items-center gap-3">
             <div className="flex min-h-12 flex-1 items-center gap-3 rounded-button border border-app-border bg-white px-4 shadow-soft">
               <Search size={20} className="text-app-muted" />
@@ -783,9 +783,9 @@ function ReaderPage({ storyId, chapterNumber }: { storyId: string; chapterNumber
   if (!story || !chapter) return <LoadingPage label="Đang mở chương..." fullScreen />;
 
   return (
-    <main className={`mx-auto min-h-screen w-full max-w-[480px] md:max-w-[860px] ${bgClass} ${readerIsDark ? 'text-[#F7FAFC]' : 'text-[#111827]'}`}>
+    <main className={`mx-auto min-h-screen w-full max-w-[480px] md:max-w-none ${bgClass} ${readerIsDark ? 'text-[#F7FAFC]' : 'text-[#111827]'}`}>
       <header
-        className={`fixed inset-x-0 top-0 z-30 mx-auto w-full max-w-[480px] border-b border-black/5 px-4 pt-[calc(10px+env(safe-area-inset-top))] backdrop-blur-xl transition-transform duration-200 md:max-w-[860px] md:px-8 ${
+        className={`fixed inset-x-0 top-0 z-30 mx-auto w-full max-w-[480px] border-b border-black/5 px-4 pt-[calc(10px+env(safe-area-inset-top))] backdrop-blur-xl transition-transform duration-200 md:max-w-none md:px-8 ${
           uiVisible ? 'translate-y-0' : '-translate-y-full'
         } ${readerIsDark ? 'border-white/10 bg-[#101828]/92 text-white' : 'bg-white/86 text-app-text'}`}
       >
@@ -893,7 +893,7 @@ function ReaderProgressFooter({
   const page = Math.max(1, Math.ceil(percent / 5));
   return (
     <footer
-      className={`fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[480px] border-t border-black/5 px-5 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl transition-transform duration-200 md:max-w-[860px] md:px-10 ${
+      className={`fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[480px] border-t border-black/5 px-5 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl transition-transform duration-200 md:max-w-none md:px-10 ${
         visible ? 'translate-y-0' : 'translate-y-full'
       } ${background === 'dark' ? 'bg-[#101828]/90 text-white' : 'bg-white/86 text-app-text'}`}
     >
@@ -1225,21 +1225,12 @@ function MePage() {
         </button>
         <SettingsRow label="Màu nền đọc" value={settings.background} swatch={settings.background} />
         <SettingsRow label="Kích thước chữ" value={`${settings.fontSize}px`} />
-        <label className="block border-t border-app-border py-3">
-          <span className="mb-2 block text-[15px] font-medium">GitHub manifest</span>
-          <input
-            value={settings.updateUrl}
-            onChange={(event) => setSettings({ updateUrl: event.target.value })}
-            placeholder="https://raw.githubusercontent.com/.../public/bundled-stories/manifest.json"
-            className="min-h-12 w-full rounded-button border border-app-border bg-white px-4 text-[14px] font-medium outline-none focus:border-app-primary"
-          />
-        </label>
         <button
           type="button"
           onClick={() => setSettings({ autoUpdate: !settings.autoUpdate })}
           className="flex min-h-14 w-full items-center justify-between border-t border-app-border text-left"
         >
-          <span className="font-medium">Auto update từ GitHub</span>
+          <span className="font-medium">Tự động cập nhật</span>
           <span className={`flex h-7 w-12 items-center rounded-full p-1 ${settings.autoUpdate ? 'bg-app-primary' : 'bg-app-border'}`}>
             <span className={`h-5 w-5 rounded-full bg-white transition ${settings.autoUpdate ? 'translate-x-5' : ''}`} />
           </span>
@@ -1249,7 +1240,7 @@ function MePage() {
           onClick={syncGithubNow}
           className="min-h-[48px] w-full rounded-button bg-app-primarySoft text-[15px] font-semibold text-app-primaryDark"
         >
-          Cập nhật truyện từ GitHub
+          Kiểm tra cập nhật
         </button>
         {updateNotice && <p className="text-[13px] font-semibold text-app-muted">{updateNotice}</p>}
         <button
@@ -1389,7 +1380,7 @@ function BottomSheet({ title, children, onClose }: { title: string; children: Re
   const darkMode = useLibraryStore((state) => state.settings.darkMode);
 
   return (
-    <div className="fixed inset-0 z-50 mx-auto w-full max-w-[480px] bg-black/25 md:max-w-[860px]" onClick={onClose}>
+    <div className="fixed inset-0 z-50 mx-auto w-full max-w-[480px] bg-black/25 md:max-w-none" onClick={onClose}>
       <div
         className={`absolute inset-x-0 bottom-0 rounded-t-[30px] px-5 pb-[calc(22px+env(safe-area-inset-bottom))] pt-3 shadow-float animate-slideUp md:px-8 ${darkMode ? 'dark-sheet bg-[#0B111B] text-[#F8FAFC]' : 'bg-app-bg'}`}
         onClick={(event) => event.stopPropagation()}
@@ -1453,7 +1444,7 @@ function SkeletonGrid() {
 
 function LoadingPage({ label, fullScreen = false }: { label: string; fullScreen?: boolean }) {
   return (
-    <div className={`mx-auto grid ${fullScreen ? 'min-h-screen' : 'min-h-[60vh]'} w-full max-w-[480px] place-items-center bg-app-bg px-5 text-center md:max-w-[860px]`}>
+    <div className={`mx-auto grid ${fullScreen ? 'min-h-screen' : 'min-h-[60vh]'} w-full max-w-[480px] place-items-center bg-app-bg px-5 text-center md:max-w-none`}>
       <div>
         <img
           src="/brand/clover-icon.png"
@@ -1468,7 +1459,7 @@ function LoadingPage({ label, fullScreen = false }: { label: string; fullScreen?
 
 function ReaderErrorPage({ message, storyId }: { message: string; storyId: string }) {
   return (
-    <main className="mx-auto grid min-h-screen w-full max-w-[480px] place-items-center bg-app-bg px-5 text-center md:max-w-[860px]">
+    <main className="mx-auto grid min-h-screen w-full max-w-[480px] place-items-center bg-app-bg px-5 text-center md:max-w-none">
       <section className="rounded-card bg-white p-6 shadow-soft">
         <h1 className="text-[22px] font-semibold">Không mở được chương</h1>
         <p className="mt-3 text-[16px] font-medium leading-7 text-app-muted">{message}</p>
