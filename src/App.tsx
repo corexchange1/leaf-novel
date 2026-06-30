@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import type { Chapter, ChapterContent, MockUser, ReaderSettings, Story } from './types';
 import { api } from './lib/api';
+import { appInfo } from './lib/appInfo';
 import { pickNativeFolder } from './lib/nativeFolder';
 import { useLibraryStore } from './store/useLibraryStore';
 import { chapterLabel, clamp, formatDateTime, formatMinutes } from './utils/format';
@@ -1094,6 +1095,7 @@ function MePage() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [pathNotice, setPathNotice] = useState('');
   const [updateNotice, setUpdateNotice] = useState('');
+  const [updateApkUrl, setUpdateApkUrl] = useState('');
   const recent = Object.values(progress).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
   if (!user) return null;
@@ -1135,9 +1137,16 @@ function MePage() {
       return;
     }
     setUpdateNotice('Đang kiểm tra cập nhật...');
+    setUpdateApkUrl('');
     try {
       const result = await api.syncRemote(settings.updateUrl);
-      setUpdateNotice(`Đã cập nhật ${result.storyCount} truyện, ${result.chapterCount} chương.`);
+      const notes = [];
+      if (result.dataUpdated) notes.push(`Đã cập nhật ${result.storyCount} truyện`);
+      if (result.appUpdate) {
+        notes.push(`Có app mới ${result.appUpdate.versionName}`);
+        setUpdateApkUrl(result.appUpdate.tabletApkUrl || result.appUpdate.phoneApkUrl || '');
+      }
+      setUpdateNotice(notes.length ? notes.join(' • ') : 'Đang là bản mới nhất.');
     } catch {
       setUpdateNotice('Không cập nhật được.');
     }
@@ -1252,6 +1261,16 @@ function MePage() {
           Kiểm tra cập nhật
         </button>
         {updateNotice && <p className="text-[13px] font-semibold text-app-muted">{updateNotice}</p>}
+        {updateApkUrl && (
+          <button
+            type="button"
+            onClick={() => window.open(updateApkUrl, '_blank')}
+            className="min-h-[48px] w-full rounded-button border border-app-border bg-white text-[15px] font-semibold shadow-soft"
+          >
+            Tải bản app mới
+          </button>
+        )}
+        <SettingsRow label="Phiên bản app" value={`v${appInfo.versionName}`} />
         <button
           type="button"
           onClick={() => setSettings({ hideUI: !settings.hideUI })}

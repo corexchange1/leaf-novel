@@ -21,7 +21,7 @@ export const defaultReaderSettings: ReaderSettings = {
   hideUI: true,
   lineHeight: 1.82,
   libraryPath: '',
-  updateUrl: import.meta.env.VITE_STORY_UPDATE_URL || 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public/bundled-stories/manifest.json',
+  updateUrl: import.meta.env.VITE_STORY_UPDATE_URL || 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public/updates/stories-index.json',
   autoUpdate: true,
 };
 

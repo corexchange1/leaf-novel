@@ -1,0 +1,11 @@
+{
+  "dataVersion": "202606301337",
+  "archiveUrl": "/updates/stories-pack.zip",
+  "sha256": "25c403eb562124778704490582bd76ed9fad2f1e74037c698432e9255516e7ba",
+  "latestApp": {
+    "versionName": "1.7",
+    "versionCode": 8,
+    "phoneApkUrl": "https://github.com/corexchange1/leaf-novel/releases/download/v1.7/leaf-novel-v1.7-phone-debug.apk",
+    "tabletApkUrl": "https://github.com/corexchange1/leaf-novel/releases/download/v1.7/leaf-novel-v1.7-tablet-debug.apk"
+  }
+}

@@ -35,35 +35,37 @@ Chapter titles can come from frontmatter `title` or the first markdown heading.
 Chapter images are optional. Put `001.png`, `001.jpg`, `001.jpeg`, or `001.webp`
 next to `001.md`/`001.html`; the app shows the image at the top of that chapter.
 
-## GitHub story auto update
+## Story pack auto update
 
-Build the public story manifest before pushing:
+Build the public story pack before pushing:
 
 ```bash
 npm run sync:stories
 ```
 
-After the repo is on GitHub, use this raw URL in the app Settings field
-`GitHub manifest`:
+The build writes:
 
 ```text
-https://raw.githubusercontent.com/<owner>/<repo>/<branch>/public/bundled-stories/manifest.json
+public/updates/stories-index.json
+public/updates/stories-pack.zip
 ```
 
-Current production manifest:
+Current production update index:
 
 ```text
-https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public/bundled-stories/manifest.json
+https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public/updates/stories-index.json
 ```
 
-The app checks that manifest when opened and every 10 minutes while running.
-Future story/chapter/image updates only need a GitHub push; installed apps will
-pull the new manifest automatically when `Auto update từ GitHub` is enabled.
+The app checks that index when opened and every 10 minutes while running. If
+`dataVersion` is newer, it downloads `stories-pack.zip`, verifies SHA-256,
+extracts the pack, and refreshes the story cache. If `latestApp.versionCode` is
+newer than the installed app, the update screen reports that an app update is
+available.
 
 For builds with a fixed default URL:
 
 ```bash
-VITE_STORY_UPDATE_URL="https://raw.githubusercontent.com/<owner>/<repo>/<branch>/public/bundled-stories/manifest.json" npm run android:debug
+VITE_STORY_UPDATE_URL="https://raw.githubusercontent.com/<owner>/<repo>/<branch>/public/updates/stories-index.json" npm run android:debug
 ```
 
 ## Demo images

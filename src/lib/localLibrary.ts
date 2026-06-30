@@ -1,4 +1,6 @@
 import type { Chapter, ChapterContent, Story } from '../types';
+import JSZip from 'jszip';
+import { appInfo } from './appInfo';
 
 type BundledStory = {
   story: Story;
@@ -20,7 +22,25 @@ type ImportRecord = {
 
 const key = 'leafnovel:local-library';
 const remoteKey = 'leafnovel:github-library';
+const remoteMetaKey = 'leafnovel:github-library-meta';
 let bundledPromise: Promise<BundledStory[]> | null = null;
+
+type RemoteMeta = {
+  dataVersion: string;
+  updatedAt: string;
+};
+
+type UpdateIndex = {
+  dataVersion?: string;
+  archiveUrl?: string;
+  sha256?: string;
+  latestApp?: {
+    versionName?: string;
+    versionCode?: number;
+    phoneApkUrl?: string;
+    tabletApkUrl?: string;
+  };
+};
 
 function blankState(): LocalLibraryState {
   return { stories: {}, chapters: {} };
@@ -41,6 +61,19 @@ function readLibraryState(storageKey: string): LocalLibraryState {
 
 function writeState(state: LocalLibraryState, storageKey = key) {
   localStorage.setItem(storageKey, JSON.stringify(state));
+}
+
+function readRemoteMeta(): RemoteMeta {
+  try {
+    const raw = localStorage.getItem(remoteMetaKey);
+    return raw ? { dataVersion: '', updatedAt: '', ...JSON.parse(raw) } : { dataVersion: '', updatedAt: '' };
+  } catch {
+    return { dataVersion: '', updatedAt: '' };
+  }
+}
+
+function writeRemoteMeta(meta: RemoteMeta) {
+  localStorage.setItem(remoteMetaKey, JSON.stringify(meta));
 }
 
 function mergeStories(base: Story[], imported: Story[]) {
@@ -167,6 +200,10 @@ function publicBaseFromManifest(updateUrl: string) {
   return url.toString().replace(/\/$/, '');
 }
 
+function absoluteUrl(value: string, baseUrl: string) {
+  return new URL(value, baseUrl).toString();
+}
+
 function resolveRemoteAsset(value: string | undefined, publicBase: string) {
   if (!value) return '';
   if (/^data:|^https?:\/\//i.test(value)) return value;
@@ -189,6 +226,97 @@ function normalizeRemoteStories(data: unknown, updateUrl: string): BundledStory[
         imageUrl: resolveRemoteAsset(chapter.imageUrl, publicBase) || chapter.imageUrl,
       })),
     }));
+}
+
+function mimeFromPath(path: string) {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  return 'application/octet-stream';
+}
+
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function sha256Hex(buffer: ArrayBuffer) {
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function dataUrlFromZip(zip: JSZip, path: string | undefined) {
+  if (!path) return '';
+  const file = zip.file(path.replace(/^\/+/, ''));
+  if (!file) return '';
+  const bytes = await file.async('uint8array');
+  return `data:${mimeFromPath(path)};base64,${bytesToBase64(bytes)}`;
+}
+
+async function storiesFromPack(buffer: ArrayBuffer): Promise<BundledStory[]> {
+  const zip = await JSZip.loadAsync(buffer);
+  const manifestFile = zip.file('manifest.json');
+  if (!manifestFile) return [];
+  const manifest = JSON.parse(await manifestFile.async('string')) as { stories?: BundledStory[] };
+  const stories = Array.isArray(manifest.stories) ? manifest.stories : [];
+  const normalized: BundledStory[] = [];
+
+  for (const item of stories) {
+    if (!item?.story?.id || !Array.isArray(item.chapters)) continue;
+    normalized.push({
+      story: {
+        ...item.story,
+        coverUrl: (await dataUrlFromZip(zip, item.story.coverUrl)) || item.story.coverUrl,
+      },
+      chapters: await Promise.all(
+        item.chapters.map(async (chapter) => ({
+          ...chapter,
+          imageUrl: (await dataUrlFromZip(zip, chapter.imageUrl)) || chapter.imageUrl,
+        })),
+      ),
+    });
+  }
+
+  return normalized;
+}
+
+function appUpdateFromIndex(index: UpdateIndex) {
+  const latestCode = Number(index.latestApp?.versionCode || 0);
+  if (!latestCode || latestCode <= appInfo.versionCode) return null;
+  return {
+    versionName: index.latestApp?.versionName || String(latestCode),
+    versionCode: latestCode,
+    phoneApkUrl: index.latestApp?.phoneApkUrl || '',
+    tabletApkUrl: index.latestApp?.tabletApkUrl || '',
+  };
+}
+
+function writeRemoteStories(stories: BundledStory[]) {
+  const state = blankState();
+  let chapterCount = 0;
+
+  for (const item of stories) {
+    state.stories[item.story.id] = {
+      ...item.story,
+      updatedAt: item.story.updatedAt || new Date().toISOString(),
+    };
+    state.chapters[item.story.id] = {};
+    for (const chapter of item.chapters) {
+      state.chapters[item.story.id][chapter.number] = chapter;
+      chapterCount += 1;
+    }
+  }
+
+  writeState(state, remoteKey);
+  window.dispatchEvent(new Event('leafnovel:local-library-updated'));
+  return { storyCount: stories.length, chapterCount };
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -336,28 +464,32 @@ export const localLibrary = {
   },
   async syncRemote(updateUrl: string) {
     const cleanUrl = updateUrl.trim();
-    if (!cleanUrl) return { storyCount: 0, chapterCount: 0, skipped: true };
+    if (!cleanUrl) return { storyCount: 0, chapterCount: 0, skipped: true, dataUpdated: false, appUpdate: null };
     const cacheBust = `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
     const response = await fetch(cacheBust, { cache: 'no-store' });
     if (!response.ok) throw new Error(`GitHub update failed: ${response.status}`);
-    const stories = normalizeRemoteStories(await response.json(), cleanUrl);
-    const state = blankState();
-    let chapterCount = 0;
+    const data = await response.json();
+    const index = data as UpdateIndex;
+    const appUpdate = appUpdateFromIndex(index);
 
-    for (const item of stories) {
-      state.stories[item.story.id] = {
-        ...item.story,
-        updatedAt: item.story.updatedAt || new Date().toISOString(),
-      };
-      state.chapters[item.story.id] = {};
-      for (const chapter of item.chapters) {
-        state.chapters[item.story.id][chapter.number] = chapter;
-        chapterCount += 1;
+    if (index.archiveUrl && index.dataVersion) {
+      const currentMeta = readRemoteMeta();
+      if (currentMeta.dataVersion === index.dataVersion) {
+        return { storyCount: remoteStories().length, chapterCount: 0, skipped: true, dataUpdated: false, appUpdate };
       }
+      const archiveUrl = absoluteUrl(index.archiveUrl, cleanUrl);
+      const archiveResponse = await fetch(`${archiveUrl}${archiveUrl.includes('?') ? '&' : '?'}t=${Date.now()}`, { cache: 'no-store' });
+      if (!archiveResponse.ok) throw new Error(`Pack update failed: ${archiveResponse.status}`);
+      const archive = await archiveResponse.arrayBuffer();
+      if (index.sha256 && (await sha256Hex(archive)) !== index.sha256) throw new Error('Pack checksum mismatch');
+      const stories = await storiesFromPack(archive);
+      const result = writeRemoteStories(stories);
+      writeRemoteMeta({ dataVersion: index.dataVersion, updatedAt: new Date().toISOString() });
+      return { ...result, skipped: false, dataUpdated: true, appUpdate };
     }
 
-    writeState(state, remoteKey);
-    window.dispatchEvent(new Event('leafnovel:local-library-updated'));
-    return { storyCount: stories.length, chapterCount, skipped: false };
+    const stories = normalizeRemoteStories(data, cleanUrl);
+    const result = writeRemoteStories(stories);
+    return { ...result, skipped: false, dataUpdated: true, appUpdate };
   },
 };

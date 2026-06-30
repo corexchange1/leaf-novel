@@ -1,10 +1,16 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import matter from 'gray-matter';
+import JSZip from 'jszip';
+import crypto from 'node:crypto';
 
 const root = process.cwd();
 const storiesDir = path.join(root, 'stories');
 const outDir = path.join(root, 'public', 'bundled-stories');
+const updatesDir = path.join(root, 'public', 'updates');
+const appVersionName = '1.7';
+const appVersionCode = 8;
+const releaseBaseUrl = `https://github.com/corexchange1/leaf-novel/releases/download/v${appVersionName}`;
 
 async function exists(filePath) {
   try {
@@ -74,6 +80,7 @@ async function readStory(storyId) {
     if (image) {
       await fs.copyFile(path.join(chaptersPath, image.name), path.join(storyOutDir, image.name));
       chapter.imageUrl = `/bundled-stories/${storyId}/${image.name}`;
+      chapter.imageFile = `stories/${storyId}/${image.name}`;
     }
 
     chapters.push(chapter);
@@ -99,6 +106,70 @@ async function readStory(storyId) {
   };
 }
 
+async function addPackAssets(zip, stories) {
+  for (const item of stories) {
+    const storyId = item.story.id;
+    const storyPath = path.join(storiesDir, storyId);
+    const coverPath = path.join(storyPath, 'cover.png');
+    if (await exists(coverPath)) {
+      zip.file(`stories/${storyId}/cover.png`, await fs.readFile(coverPath));
+      item.story.coverFile = `stories/${storyId}/cover.png`;
+    }
+
+    for (const chapter of item.chapters) {
+      if (!chapter.imageFile) continue;
+      const imagePath = path.join(storiesDir, storyId, 'chapters', path.basename(chapter.imageFile));
+      if (await exists(imagePath)) zip.file(chapter.imageFile, await fs.readFile(imagePath));
+    }
+  }
+}
+
+function packManifest(stories) {
+  return {
+    generatedAt: new Date().toISOString(),
+    stories: stories.map((item) => ({
+      story: {
+        ...item.story,
+        coverUrl: item.story.coverFile || item.story.coverUrl,
+      },
+      chapters: item.chapters.map((chapter) => ({
+        ...chapter,
+        imageUrl: chapter.imageFile || chapter.imageUrl,
+      })),
+    })),
+  };
+}
+
+async function writeUpdatePack(stories) {
+  await fs.rm(updatesDir, { recursive: true, force: true });
+  await fs.mkdir(updatesDir, { recursive: true });
+  const dataVersion = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 12);
+  const zip = new JSZip();
+  await addPackAssets(zip, stories);
+  zip.file('manifest.json', `${JSON.stringify(packManifest(stories), null, 2)}\n`);
+  const archive = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  const sha256 = crypto.createHash('sha256').update(archive).digest('hex');
+  await fs.writeFile(path.join(updatesDir, 'stories-pack.zip'), archive);
+  await fs.writeFile(
+    path.join(updatesDir, 'stories-index.json'),
+    `${JSON.stringify(
+      {
+        dataVersion,
+        archiveUrl: '/updates/stories-pack.zip',
+        sha256,
+        latestApp: {
+          versionName: appVersionName,
+          versionCode: appVersionCode,
+          phoneApkUrl: `${releaseBaseUrl}/leaf-novel-v${appVersionName}-phone-debug.apk`,
+          tabletApkUrl: `${releaseBaseUrl}/leaf-novel-v${appVersionName}-tablet-debug.apk`,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
 async function main() {
   await fs.rm(outDir, { recursive: true, force: true });
   await fs.mkdir(outDir, { recursive: true });
@@ -113,6 +184,7 @@ async function main() {
 
   stories.sort((a, b) => new Date(b.story.updatedAt).getTime() - new Date(a.story.updatedAt).getTime());
   await fs.writeFile(path.join(outDir, 'manifest.json'), `${JSON.stringify({ stories }, null, 2)}\n`);
+  await writeUpdatePack(stories);
   console.log(`Bundled ${stories.length} stories into ${path.relative(root, outDir)}`);
 }
 
