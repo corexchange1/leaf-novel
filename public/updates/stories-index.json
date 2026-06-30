@@ -1,7 +1,7 @@
 {
-  "dataVersion": "202606302304",
-  "archiveUrl": "/updates/stories-pack.zip",
-  "sha256": "91dedac9d98d2fc7c482d76975a39ce6d3c86946959758680826057bacebbd8d",
+  "dataVersion": "202606302334",
+  "archiveUrl": "stories-pack.zip",
+  "sha256": "b09c427c02ced4d867545a37fcc0049d3f431caf09e55987ef478d354f8eca2a",
   "latestApp": {
     "versionName": "1.8",
     "versionCode": 9,

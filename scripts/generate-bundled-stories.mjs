@@ -205,7 +205,7 @@ async function writeUpdatePack(stories) {
     `${JSON.stringify(
       {
         dataVersion,
-        archiveUrl: '/updates/stories-pack.zip',
+        archiveUrl: 'stories-pack.zip',
         sha256,
         latestApp: {
           versionName: appVersionName,
