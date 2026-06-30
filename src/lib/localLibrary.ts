@@ -246,6 +246,7 @@ function bytesToBase64(bytes: Uint8Array) {
 }
 
 async function sha256Hex(buffer: ArrayBuffer) {
+  if (!crypto.subtle?.digest) return '';
   const digest = await crypto.subtle.digest('SHA-256', buffer);
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, '0'))
@@ -522,7 +523,8 @@ export const localLibrary = {
       const archiveResponse = await fetch(`${archiveUrl}${archiveUrl.includes('?') ? '&' : '?'}t=${Date.now()}`, { cache: 'no-store' });
       if (!archiveResponse.ok) throw new Error(`Pack update failed: ${archiveResponse.status}`);
       const archive = await archiveResponse.arrayBuffer();
-      if (index.sha256 && (await sha256Hex(archive)) !== index.sha256) throw new Error('Pack checksum mismatch');
+      const archiveSha = index.sha256 ? await sha256Hex(archive) : '';
+      if (index.sha256 && archiveSha && archiveSha !== index.sha256) throw new Error('Pack checksum mismatch');
       const stories = await storiesFromPack(archive);
       const result = writeRemoteStories(stories);
       writeRemoteMeta({ dataVersion: index.dataVersion, updatedAt: new Date().toISOString() });

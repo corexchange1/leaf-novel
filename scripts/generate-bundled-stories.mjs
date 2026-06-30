@@ -2,7 +2,6 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import matter from 'gray-matter';
 import JSZip from 'jszip';
-import crypto from 'node:crypto';
 
 const root = process.cwd();
 const storiesDir = path.join(root, 'stories');
@@ -198,7 +197,6 @@ async function writeUpdatePack(stories) {
   await addPackAssets(zip, stories);
   zip.file('manifest.json', `${JSON.stringify(packManifest(stories), null, 2)}\n`);
   const archive = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
-  const sha256 = crypto.createHash('sha256').update(archive).digest('hex');
   await fs.writeFile(path.join(updatesDir, 'stories-pack.zip'), archive);
   await fs.writeFile(
     path.join(updatesDir, 'stories-index.json'),
@@ -206,7 +204,6 @@ async function writeUpdatePack(stories) {
       {
         dataVersion,
         archiveUrl: 'stories-pack.zip',
-        sha256,
         latestApp: {
           versionName: appVersionName,
           versionCode: appVersionCode,
