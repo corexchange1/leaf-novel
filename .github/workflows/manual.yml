@@ -1,0 +1,49 @@
+name: Build APK
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install dependencies
+        run: npm ci
+      - name: Sync Capacitor
+        run: npx cap sync android
+      - name: Build web assets
+        run: npm run build
+      - name: Build APK (phone)
+        run: cd android && ./gradlew assemblePhoneDebug
+      - name: Build APK (tablet)
+        run: cd android && ./gradlew assembleTabletDebug
+      - name: Rename APKs
+        run: |
+          VERSION=$(node -e "const fs=require('fs'); const m=fs.readFileSync('src/lib/appInfo.ts','utf8').match(/versionName:\s*'([^']+)'/); console.log(m?m[1]:'1.29')")
+          mkdir -p artifacts
+          cp android/app/build/outputs/apk/phone/debug/app-phone-debug.apk artifacts/leaf-novel-v\${VERSION}-phone-debug.apk
+          cp android/app/build/outputs/apk/tablet/debug/app-tablet-debug.apk artifacts/leaf-novel-v\${VERSION}-tablet-debug.apk
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: artifacts/*.apk
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: v1.29
+          name: Release v1.29
+          artifacts: artifacts/*.apk
+          draft: true
+          allowUpdates: true
+          replacesArtifacts: true
