@@ -12,8 +12,8 @@ const audioDir = path.join(root, 'audio');
 const outDir = path.join(root, 'public', 'bundled-stories');
 const audioOutDir = path.join(root, 'public', 'audio');
 const updatesDir = path.join(root, 'public', 'updates');
-const appVersionName = '1.28';
-const appVersionCode = 29;
+const appVersionName = '1.29';
+const appVersionCode = 30;
 const releaseBaseUrl = `https://github.com/corexchange1/leaf-novel/releases/download/v${appVersionName}`;
 const rawPublicBaseUrl = 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public';
 const imageExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp']);
@@ -469,13 +469,13 @@ function packManifest(stories) {
     stories: stories.map((item) => ({
       story: {
         ...item.story,
-        coverUrl: item.story.coverFile || item.story.coverUrl,
+        coverUrl: absolutePublicUrl(item.story.coverUrl),
       },
       chapters: item.chapters.map((chapter) => ({
         ...chapter,
-        content: chapter.content.replaceAll(`/bundled-stories/${item.story.id}/chapters/`, ''),
-        imageUrl: chapter.imageFile || chapter.imageUrl,
-        thumbnailUrl: chapter.thumbnailFile || chapter.thumbnailUrl,
+        content: chapter.content.replaceAll('/bundled-stories/', `${rawPublicBaseUrl}/bundled-stories/`),
+        imageUrl: absolutePublicUrl(chapter.imageUrl),
+        thumbnailUrl: absolutePublicUrl(chapter.thumbnailUrl),
       })),
     })),
   };
@@ -507,7 +507,6 @@ async function writeUpdatePack(stories) {
   const dataVersion = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 12);
   await fs.writeFile(path.join(updatesDir, 'accounts.json'), `${JSON.stringify({ generatedAt: new Date().toISOString(), accounts }, null, 2)}\n`);
   const zip = new JSZip();
-  await addPackAssets(zip, stories);
   zip.file('manifest.json', `${JSON.stringify(packManifest(stories), null, 2)}\n`);
   const archive = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
   await fs.writeFile(path.join(updatesDir, 'stories-pack.zip'), archive);
