@@ -12,8 +12,8 @@ const audioDir = path.join(root, 'audio');
 const outDir = path.join(root, 'public', 'bundled-stories');
 const audioOutDir = path.join(root, 'public', 'audio');
 const updatesDir = path.join(root, 'public', 'updates');
-const appVersionName = '1.27';
-const appVersionCode = 28;
+const appVersionName = '1.28';
+const appVersionCode = 29;
 const releaseBaseUrl = `https://github.com/corexchange1/leaf-novel/releases/download/v${appVersionName}`;
 const rawPublicBaseUrl = 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public';
 const imageExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp']);
@@ -63,9 +63,9 @@ function audioVariantId(filename) {
 
 function audioVariantLabel(filename) {
   const id = audioVariantId(filename);
-  if (/tell|ke|kể|narr/i.test(id)) return 'Kể truyện';
-  if (/long|lồng|voice|cast/i.test(id)) return 'Lồng';
-  if (id === 'main') return 'Lồng';
+  if (/tell|ke|kể|narr/i.test(id)) return 'Audio';
+  if (/long|lồng|voice|cast/i.test(id)) return 'Lồng tiếng';
+  if (id === 'main') return 'Lồng tiếng';
   return id
     .split(/[-_]+/)
     .filter(Boolean)
