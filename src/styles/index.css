@@ -214,3 +214,36 @@ button {
 .animate-slideDown {
   animation: slideDown 180ms ease-out both;
 }
+
+.audio-disc {
+  position: relative;
+  overflow: hidden;
+  border-radius: 9999px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+
+.audio-disc::after {
+  content: '';
+  position: absolute;
+  inset: 42%;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+.audio-disc.is-playing {
+  animation: audioSpin 18s linear infinite;
+}
+
+.audio-island {
+  animation: slideDown 180ms ease-out both;
+}
+
+@keyframes audioSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

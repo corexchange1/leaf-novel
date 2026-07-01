@@ -18,10 +18,15 @@ import {
   Menu,
   Minus,
   Pencil,
+  Pause,
+  Play,
   Plus,
+  Rewind,
   Search,
   Settings,
   Share2,
+  SkipBack,
+  SkipForward,
   SlidersHorizontal,
   UserRound,
   X,
@@ -1452,10 +1457,19 @@ function normalizeAudioManifest(data: unknown, manifestUrl: string): AudioStory[
     }));
 }
 
+function formatAudioTime(value: number) {
+  if (!Number.isFinite(value) || value < 0) return '0:00';
+  const total = Math.floor(value);
+  const minutes = Math.floor(total / 60);
+  const seconds = String(total % 60).padStart(2, '0');
+  return `${minutes}:${seconds}`;
+}
+
 function AudioPage() {
   const { stories } = useStories();
   const [audioStories, setAudioStories] = useState<AudioStory[]>([]);
   const [selectedStoryId, setSelectedStoryId] = useState('');
+  const [selectedChapterNumber, setSelectedChapterNumber] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -1488,6 +1502,25 @@ function AudioPage() {
     : stories.map((story) => ({ story: { id: story.id, title: story.title, coverUrl: story.coverUrl, totalChapters: 0 }, chapters: [] }));
   const effectiveSelectedStoryId = selectedStoryId || visibleAudioStories[0]?.story.id || '';
   const selectedAudioStory = visibleAudioStories.find((item) => item.story.id === effectiveSelectedStoryId);
+  const selectedChapter =
+    selectedAudioStory?.chapters.find((chapter) => chapter.chapterNumber === selectedChapterNumber) || selectedAudioStory?.chapters[0] || null;
+
+  useEffect(() => {
+    if (!selectedAudioStory?.chapters.length) {
+      setSelectedChapterNumber(0);
+      return;
+    }
+    setSelectedChapterNumber((current) =>
+      selectedAudioStory.chapters.some((chapter) => chapter.chapterNumber === current) ? current : selectedAudioStory.chapters[0].chapterNumber,
+    );
+  }, [selectedAudioStory?.story.id, selectedAudioStory?.chapters]);
+
+  const selectedChapterIndex = selectedAudioStory?.chapters.findIndex((chapter) => chapter.chapterNumber === selectedChapter?.chapterNumber) ?? -1;
+  const previousChapter = selectedAudioStory && selectedChapterIndex > 0 ? selectedAudioStory.chapters[selectedChapterIndex - 1] : null;
+  const nextChapter =
+    selectedAudioStory && selectedChapterIndex >= 0 && selectedChapterIndex < selectedAudioStory.chapters.length - 1
+      ? selectedAudioStory.chapters[selectedChapterIndex + 1]
+      : null;
 
   return (
     <section className="space-y-5 px-5 pb-8 pt-[calc(22px+env(safe-area-inset-top))] md:px-8">
@@ -1506,7 +1539,10 @@ function AudioPage() {
           <button
             type="button"
             key={story.id}
-            onClick={() => setSelectedStoryId(story.id)}
+            onClick={() => {
+              setSelectedStoryId(story.id);
+              setSelectedChapterNumber(0);
+            }}
             className={`w-[210px] shrink-0 rounded-card p-3 text-left shadow-soft active:scale-[0.99] ${
               effectiveSelectedStoryId === story.id ? 'bg-app-primarySoft text-app-primaryDark' : 'bg-white'
             }`}
@@ -1526,7 +1562,7 @@ function AudioPage() {
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-[21px] font-semibold">{selectedAudioStory?.story.title || 'Chưa có audio'}</h2>
-            <p className="mt-1 text-[14px] font-medium text-app-muted">Đặt file theo format: audio/story-id/001.mp3</p>
+            <p className="mt-1 text-[14px] font-medium text-app-muted">Chọn chương để nghe</p>
           </div>
           <span className="grid h-10 w-10 place-items-center rounded-full bg-app-primarySoft text-app-primaryDark">
             <Headphones size={20} />
@@ -1534,31 +1570,275 @@ function AudioPage() {
         </div>
 
         {selectedAudioStory?.chapters.length ? (
-          <div className="space-y-3">
-            {selectedAudioStory.chapters.map((chapter) => (
-              <article key={`${chapter.storyId}-${chapter.chapterNumber}`} className="rounded-[20px] border border-app-border bg-app-bg p-3">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-app-muted">Audio {String(chapter.chapterNumber).padStart(3, '0')}</p>
-                    <h3 className="truncate text-[16px] font-semibold">{chapter.title}</h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/read/${chapter.storyId}/${chapter.chapterNumber}`)}
-                    className="rounded-full bg-white px-3 py-2 text-[12px] font-semibold text-app-muted shadow-soft"
-                  >
-                    Text
-                  </button>
-                </div>
-                <audio controls preload="none" src={chapter.audioUrl} className="h-10 w-full" />
-              </article>
-            ))}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              {selectedAudioStory.chapters.map((chapter) => (
+                <button
+                  type="button"
+                  key={`${chapter.storyId}-${chapter.chapterNumber}`}
+                  onClick={() => setSelectedChapterNumber(chapter.chapterNumber)}
+                  className={`flex min-h-[68px] w-full items-center gap-3 rounded-[20px] border p-3 text-left active:scale-[0.99] ${
+                    selectedChapter?.chapterNumber === chapter.chapterNumber
+                      ? 'border-app-primary bg-app-primarySoft text-app-primaryDark'
+                      : 'border-app-border bg-app-bg'
+                  }`}
+                >
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[13px] font-semibold shadow-soft">
+                    {String(chapter.chapterNumber).padStart(2, '0')}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[16px] font-semibold">{chapter.title}</span>
+                    <span className="mt-0.5 block text-[12px] font-semibold opacity-70">{chapter.filename}</span>
+                  </span>
+                  <ChevronRight size={18} className="shrink-0 opacity-70" />
+                </button>
+              ))}
+            </div>
+
+            {selectedChapter && (
+              <AudioChapterPlayer
+                key={`${selectedChapter.storyId}-${selectedChapter.chapterNumber}`}
+                story={selectedAudioStory.story}
+                chapter={selectedChapter}
+                previousChapter={previousChapter}
+                nextChapter={nextChapter}
+                onPrevious={() => previousChapter && setSelectedChapterNumber(previousChapter.chapterNumber)}
+                onNext={() => nextChapter && setSelectedChapterNumber(nextChapter.chapterNumber)}
+              />
+            )}
+
+            {selectedChapter && (
+              <button
+                type="button"
+                onClick={() => navigate(`/read/${selectedChapter.storyId}/${selectedChapter.chapterNumber}`)}
+                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-button bg-white text-[14px] font-semibold text-app-muted shadow-soft"
+              >
+                <BookOpen size={17} />
+                Mở bản chữ
+              </button>
+            )}
           </div>
         ) : (
           <EmptyCard text="Chưa tìm thấy file audio cho truyện này." />
         )}
       </section>
     </section>
+  );
+}
+
+function AudioChapterPlayer({
+  story,
+  chapter,
+  previousChapter,
+  nextChapter,
+  onPrevious,
+  onNext,
+}: {
+  story: Pick<Story, 'id' | 'title' | 'coverUrl' | 'totalChapters'>;
+  chapter: AudioChapter;
+  previousChapter: AudioChapter | null;
+  nextChapter: AudioChapter | null;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const speedOptions = [0.75, 1, 1.25, 1.5, 2];
+
+  const seekBy = (seconds: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = clamp(audio.currentTime + seconds, 0, audio.duration || 0);
+    setCurrentTime(audio.currentTime);
+  };
+
+  const seekTo = (value: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = clamp(value, 0, audio.duration || 0);
+    setCurrentTime(audio.currentTime);
+  };
+
+  const togglePlay = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      await audio.play();
+    } else {
+      audio.pause();
+    }
+  };
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.playbackRate = playbackRate;
+  }, [playbackRate]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const syncTime = () => setCurrentTime(audio.currentTime || 0);
+    const syncDuration = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+    const syncPlaying = () => setPlaying(!audio.paused);
+    const handleEnded = () => {
+      setPlaying(false);
+      if (nextChapter) onNext();
+    };
+
+    audio.addEventListener('timeupdate', syncTime);
+    audio.addEventListener('loadedmetadata', syncDuration);
+    audio.addEventListener('durationchange', syncDuration);
+    audio.addEventListener('play', syncPlaying);
+    audio.addEventListener('pause', syncPlaying);
+    audio.addEventListener('ended', handleEnded);
+    syncDuration();
+    syncTime();
+    syncPlaying();
+
+    return () => {
+      audio.removeEventListener('timeupdate', syncTime);
+      audio.removeEventListener('loadedmetadata', syncDuration);
+      audio.removeEventListener('durationchange', syncDuration);
+      audio.removeEventListener('play', syncPlaying);
+      audio.removeEventListener('pause', syncPlaying);
+      audio.removeEventListener('ended', handleEnded);
+    };
+  }, [chapter.audioUrl, nextChapter, onNext]);
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: chapter.title,
+      artist: story.title,
+      album: 'Leaf Novel',
+      artwork: story.coverUrl ? [{ src: story.coverUrl, sizes: '512x512', type: 'image/png' }] : undefined,
+    });
+
+    const setHandler = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch {
+        // Some Android WebView versions do not expose every media action.
+      }
+    };
+
+    setHandler('play', () => void audioRef.current?.play());
+    setHandler('pause', () => audioRef.current?.pause());
+    setHandler('seekbackward', () => seekBy(-15));
+    setHandler('seekforward', () => seekBy(15));
+    setHandler('previoustrack', previousChapter ? onPrevious : null);
+    setHandler('nexttrack', nextChapter ? onNext : null);
+    setHandler('seekto', (details) => {
+      if (typeof details.seekTime === 'number') seekTo(details.seekTime);
+    });
+
+    return () => {
+      setHandler('play', null);
+      setHandler('pause', null);
+      setHandler('seekbackward', null);
+      setHandler('seekforward', null);
+      setHandler('previoustrack', null);
+      setHandler('nexttrack', null);
+      setHandler('seekto', null);
+    };
+  }, [chapter.title, story.title, story.coverUrl, previousChapter, nextChapter, onPrevious, onNext]);
+
+  return (
+    <article className="rounded-card bg-app-bg p-4">
+      <audio ref={audioRef} src={chapter.audioUrl} preload="metadata" />
+      <div className="mb-4 flex items-center gap-3">
+        <div className={`audio-disc h-20 w-20 shrink-0 ${playing ? 'is-playing' : ''}`}>
+          <Cover story={story as Story} className="h-full w-full rounded-full" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-app-muted">Đang nghe</p>
+          <h3 className="mt-1 line-clamp-2 text-[18px] font-semibold leading-tight">{chapter.title}</h3>
+          <p className="mt-1 truncate text-[13px] font-semibold text-app-muted">{story.title}</p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <input
+          type="range"
+          min={0}
+          max={duration || 0}
+          step={1}
+          value={Math.min(currentTime, duration || currentTime)}
+          onChange={(event) => seekTo(Number(event.target.value))}
+          className="h-2 w-full accent-app-primary"
+          aria-label="Tua audio"
+        />
+        <div className="flex items-center justify-between text-[12px] font-semibold text-app-muted">
+          <span>{formatAudioTime(currentTime)}</span>
+          <span>{formatAudioTime(duration)}</span>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-center gap-3">
+        <button
+          type="button"
+          onClick={onPrevious}
+          disabled={!previousChapter}
+          className="grid h-11 w-11 place-items-center rounded-full bg-white text-app-muted shadow-soft disabled:opacity-35"
+          aria-label="Chương trước"
+        >
+          <SkipBack size={20} />
+        </button>
+        <button type="button" onClick={() => seekBy(-15)} className="grid h-11 w-11 place-items-center rounded-full bg-white text-app-muted shadow-soft" aria-label="Tua lùi 15 giây">
+          <Rewind size={19} />
+        </button>
+        <button type="button" onClick={() => void togglePlay()} className="grid h-14 w-14 place-items-center rounded-full bg-app-primary text-white shadow-soft" aria-label="Phát hoặc tạm dừng">
+          {playing ? <Pause size={25} /> : <Play size={25} />}
+        </button>
+        <button type="button" onClick={() => seekBy(15)} className="grid h-11 w-11 place-items-center rounded-full bg-white text-app-muted shadow-soft" aria-label="Tua tới 15 giây">
+          <SkipForward size={19} />
+        </button>
+        <button
+          type="button"
+          onClick={onNext}
+          disabled={!nextChapter}
+          className="grid h-11 w-11 place-items-center rounded-full bg-white text-app-muted shadow-soft disabled:opacity-35"
+          aria-label="Chương sau"
+        >
+          <ChevronRight size={22} />
+        </button>
+      </div>
+
+      <div className="mt-4 grid grid-cols-5 gap-2">
+        {speedOptions.map((speed) => (
+          <button
+            type="button"
+            key={speed}
+            onClick={() => setPlaybackRate(speed)}
+            className={`min-h-10 rounded-full text-[13px] font-semibold ${
+              playbackRate === speed ? 'bg-app-primary text-white' : 'bg-white text-app-muted'
+            }`}
+          >
+            {speed}x
+          </button>
+        ))}
+      </div>
+
+      {playing && (
+        <div className="audio-island fixed inset-x-0 top-[calc(10px+env(safe-area-inset-top))] z-[70] mx-auto flex w-[min(92vw,420px)] items-center gap-3 rounded-full bg-[#071017]/92 px-3 py-2 text-white shadow-float backdrop-blur">
+          <div className="audio-disc is-playing h-10 w-10 shrink-0">
+            <Cover story={story as Story} className="h-full w-full rounded-full" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-semibold">{chapter.title}</p>
+            <p className="truncate text-[11px] font-medium text-white/65">{formatAudioTime(currentTime)} / {formatAudioTime(duration)}</p>
+          </div>
+          <button type="button" onClick={() => void togglePlay()} className="grid h-9 w-9 place-items-center rounded-full bg-white/12" aria-label="Tạm dừng">
+            <Pause size={18} />
+          </button>
+        </div>
+      )}
+    </article>
   );
 }
 
