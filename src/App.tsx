@@ -916,9 +916,11 @@ function TriggeredImage({ triggerId, src, alt, effect = 'none' }: { triggerId: s
     const image = ref.current;
     if (!image || hasStoredFlag(triggeredImageKey, triggerId)) return undefined;
     let timeout = 0;
-    let armed = true;
+    let hasTriggered = false;
 
     const runTrigger = () => {
+      if (hasTriggered || hasStoredFlag(triggeredImageKey, triggerId)) return;
+      hasTriggered = true;
       addStoredFlag(triggeredImageKey, triggerId);
       window.clearTimeout(timeout);
       setTriggered(true);
@@ -931,16 +933,9 @@ function TriggeredImage({ triggerId, src, alt, effect = 'none' }: { triggerId: s
       if (normalizedEffect === 'none') return;
       const rect = image.getBoundingClientRect();
       const topEdge = 24;
-      const rearmDistance = 120;
       const imageVisible = rect.bottom > 0 && rect.top < window.innerHeight;
 
-      if (rect.top > rearmDistance || rect.bottom < -rearmDistance) {
-        armed = true;
-        return;
-      }
-
-      if (armed && imageVisible && rect.top <= topEdge && rect.top >= -topEdge) {
-        armed = false;
+      if (!hasTriggered && imageVisible && rect.top <= topEdge && rect.top >= -topEdge) {
         runTrigger();
       }
     };
