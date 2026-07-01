@@ -217,7 +217,7 @@
   "latestApp": {
     "versionName": "1.30",
     "versionCode": 31,
-    "phoneApkUrl": "https://github.com/corexchange1/leaf-novel/releases/download/v1.30/leaf-novel-v1.30-phone-debug.apk",
-    "tabletApkUrl": "https://github.com/corexchange1/leaf-novel/releases/download/v1.30/leaf-novel-v1.30-tablet-debug.apk"
+    "phoneApkUrl": "https://github.com/corexchange1/leaf-novel/releases/download/1.29.1/leaf-novel-v1.30-phone-debug.apk",
+    "tabletApkUrl": "https://github.com/corexchange1/leaf-novel/releases/download/1.29.1/leaf-novel-v1.30-tablet-debug.apk"
   }
 }
