@@ -796,9 +796,10 @@ function ReaderPage({ storyId, chapterNumber }: { storyId: string; chapterNumber
   const currentIndex = chapters.findIndex((item) => item.number === chapterNumber);
   const nextChapter = currentIndex >= 0 ? chapters[currentIndex + 1] : undefined;
   const showNextChapter = hasReachedChapterEnd && !!nextChapter;
-  const bgClass = readerBgClass(settings.background);
+  const effectiveBackground = settings.darkMode ? 'dark' : settings.background;
+  const bgClass = readerBgClass(effectiveBackground);
   const fontClass = settings.fontFamily === 'serif' ? 'font-serif' : 'font-sans';
-  const readerIsDark = settings.darkMode || settings.background === 'dark';
+  const readerIsDark = effectiveBackground === 'dark';
   const openReaderSettings = () => {
     window.history.pushState({ app: true, readerSettings: true }, '', `/read/${storyId}/${chapterNumber}`);
     setSettingsOpen(true);
@@ -916,7 +917,7 @@ function ReaderPage({ storyId, chapterNumber }: { storyId: string; chapterNumber
         Aa
       </button>
 
-      <ReaderProgressFooter percent={scrollPercent} visible={uiVisible && !showNextChapter} background={settings.background} />
+      <ReaderProgressFooter percent={scrollPercent} visible={uiVisible && !showNextChapter} background={effectiveBackground} />
       <ReaderSettingsSheet open={settingsOpen} onClose={closeReaderSettings} />
     </main>
   );
