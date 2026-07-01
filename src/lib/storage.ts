@@ -12,10 +12,10 @@ const keys = {
 };
 
 export const officialUpdateUrl =
-  import.meta.env.VITE_STORY_UPDATE_URL || 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public/updates/stories-index.json';
+  import.meta.env.VITE_STORY_UPDATE_URL || 'https://api.github.com/repos/corexchange1/leaf-novel/contents/public/updates/stories-index.json?ref=master';
 
 export const officialAccountsUrl =
-  import.meta.env.VITE_ACCOUNTS_URL || 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public/updates/accounts.json';
+  import.meta.env.VITE_ACCOUNTS_URL || 'https://api.github.com/repos/corexchange1/leaf-novel/contents/public/updates/accounts.json?ref=master';
 
 const bundledAccounts: AccountRecord[] = [
   { id: 'min', username: 'min', password: '123456', email: 'min@leafnovel.local', defaultName: 'Min', devices: ['any'] },
@@ -175,7 +175,7 @@ export async function syncAccounts(url = officialAccountsUrl) {
   try {
     const response = await fetch(`${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`, { cache: 'no-store' });
     if (!response.ok) throw new Error(`Accounts failed: ${response.status}`);
-    const data = await response.json();
+    const data = decodeGithubContent(await response.json());
     const accounts = Array.isArray(data.accounts) ? (data.accounts as AccountRecord[]) : [];
     if (!accounts.length) throw new Error('Accounts empty');
     writeStorage(keys.accounts, accounts);
@@ -183,6 +183,12 @@ export async function syncAccounts(url = officialAccountsUrl) {
   } catch {
     return accountRecords();
   }
+}
+
+function decodeGithubContent(data: unknown) {
+  const content = (data as { content?: string })?.content;
+  if (!content) return data as { accounts?: AccountRecord[] };
+  return JSON.parse(atob(content.replace(/\s/g, ''))) as { accounts?: AccountRecord[] };
 }
 
 export const storage = {

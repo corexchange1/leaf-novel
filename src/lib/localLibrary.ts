@@ -195,6 +195,15 @@ function companionKey(path: string) {
 
 function publicBaseFromManifest(updateUrl: string) {
   const url = new URL(updateUrl);
+  if (url.hostname === 'api.github.com' && url.pathname.includes('/contents/')) {
+    const parts = url.pathname.split('/').filter(Boolean);
+    const owner = parts[1];
+    const repo = parts[2];
+    const contentIndex = parts.indexOf('contents');
+    const branch = url.searchParams.get('ref') || 'master';
+    const folder = parts.slice(contentIndex + 1, -1).join('/');
+    return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${folder}`.replace(/\/$/, '');
+  }
   url.search = '';
   url.hash = '';
   url.pathname = url.pathname.replace(/\/bundled-stories\/manifest\.json$/, '');
@@ -202,6 +211,10 @@ function publicBaseFromManifest(updateUrl: string) {
 }
 
 function absoluteUrl(value: string, baseUrl: string) {
+  if (/^https?:\/\//i.test(value)) return value;
+  if (baseUrl.includes('api.github.com') && baseUrl.includes('/contents/')) {
+    return new URL(value, `${publicBaseFromManifest(baseUrl)}/`).toString();
+  }
   return new URL(value, baseUrl).toString();
 }
 
@@ -253,6 +266,12 @@ async function sha256Hex(buffer: ArrayBuffer) {
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');
+}
+
+function decodeGithubContent(data: unknown): unknown {
+  const content = (data as { content?: string })?.content;
+  if (!content) return data;
+  return JSON.parse(atob(content.replace(/\s/g, '')));
 }
 
 async function dataUrlFromZip(zip: JSZip, path: string | undefined) {
@@ -513,7 +532,7 @@ export const localLibrary = {
     const cacheBust = `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
     const response = await fetch(cacheBust, { cache: 'no-store' });
     if (!response.ok) throw new Error(`GitHub update failed: ${response.status}`);
-    const data = await response.json();
+    const data = decodeGithubContent(await response.json());
     const index = data as UpdateIndex;
     const appUpdate = appUpdateFromIndex(index);
 
