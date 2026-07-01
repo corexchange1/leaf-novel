@@ -12,8 +12,8 @@ const audioDir = path.join(root, 'audio');
 const outDir = path.join(root, 'public', 'bundled-stories');
 const audioOutDir = path.join(root, 'public', 'audio');
 const updatesDir = path.join(root, 'public', 'updates');
-const appVersionName = '1.26';
-const appVersionCode = 27;
+const appVersionName = '1.27';
+const appVersionCode = 28;
 const releaseBaseUrl = `https://github.com/corexchange1/leaf-novel/releases/download/v${appVersionName}`;
 const rawPublicBaseUrl = 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public';
 const imageExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp']);
@@ -71,6 +71,24 @@ function audioVariantLabel(filename) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+async function audioDurationSeconds(filePath) {
+  try {
+    const { stdout } = await execFileAsync('ffprobe', [
+      '-v',
+      'error',
+      '-show_entries',
+      'format=duration',
+      '-of',
+      'default=noprint_wrappers=1:nokey=1',
+      filePath,
+    ]);
+    const duration = Number.parseFloat(stdout.trim());
+    return Number.isFinite(duration) ? Math.round(duration) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function chapterImageAssets(entries, chapterNumber) {
@@ -352,14 +370,17 @@ async function copyAudioForStory(storyId, chapters) {
 
       const targetDir = path.join(audioOutDir, storyId);
       const target = path.join(targetDir, entry.name);
+      const source = path.join(sourceDir, entry.name);
       await fs.mkdir(targetDir, { recursive: true });
-      await fs.copyFile(path.join(sourceDir, entry.name), target);
+      await fs.copyFile(source, target);
+      const durationSeconds = await audioDurationSeconds(source);
       const chapter = chapters.find((item) => item.number === number);
       const variant = {
         id: audioVariantId(entry.name),
         label: audioVariantLabel(entry.name),
         filename: entry.name,
         audioUrl: `/audio/${storyId}/${entry.name}`,
+        durationSeconds,
       };
       const current =
         tracks.get(number) || {
@@ -368,23 +389,31 @@ async function copyAudioForStory(storyId, chapters) {
           title: chapter?.title || `Chương ${String(number).padStart(3, '0')}`,
           filename: entry.name,
           audioUrl: variant.audioUrl,
+          durationSeconds,
           variants: [],
         };
       current.variants.push(variant);
       current.filename = current.variants[0].filename;
       current.audioUrl = current.variants[0].audioUrl;
+      current.durationSeconds = current.variants[0].durationSeconds;
       tracks.set(number, current);
     }
   }
 
   return Array.from(tracks.values())
-    .map((track) => ({
-      ...track,
-      variants: track.variants.sort((a, b) => {
+    .map((track) => {
+      const variants = track.variants.sort((a, b) => {
         const rank = (value) => (value.id === 'long' || value.id === 'main' ? 0 : value.id === 'tell' ? 1 : 2);
         return rank(a) - rank(b) || a.label.localeCompare(b.label, 'vi-VN');
-      }),
-    }))
+      });
+      return {
+        ...track,
+        filename: variants[0].filename,
+        audioUrl: variants[0].audioUrl,
+        durationSeconds: variants[0].durationSeconds,
+        variants,
+      };
+    })
     .sort((a, b) => a.chapterNumber - b.chapterNumber);
 }
 

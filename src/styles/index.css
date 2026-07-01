@@ -235,8 +235,43 @@ button {
   animation: audioSpin 18s linear infinite;
 }
 
+.audio-cover-stage {
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 28px;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
+  transform-origin: center;
+}
+
+.audio-cover-stage.is-playing {
+  animation: audioFloat 7s ease-in-out infinite;
+}
+
 .audio-island {
   animation: slideDown 180ms ease-out both;
+}
+
+.audio-waveform {
+  display: flex;
+  height: 78px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 6px;
+}
+
+.audio-waveform span {
+  display: block;
+  width: 6px;
+  min-height: 16px;
+  border-radius: 9999px;
+  background: currentColor;
+  color: #111827;
+  opacity: 0.92;
+}
+
+.app-dark .audio-waveform span {
+  color: #f8fafc;
 }
 
 @keyframes audioSpin {
@@ -245,5 +280,15 @@ button {
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes audioFloat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.015);
   }
 }

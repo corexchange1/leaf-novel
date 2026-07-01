@@ -1,4 +1,4 @@
 export const appInfo = {
-  versionName: '1.26',
-  versionCode: 27,
+  versionName: '1.27',
+  versionCode: 28,
 };

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import {
@@ -21,6 +21,7 @@ import {
   Pause,
   Play,
   Plus,
+  Repeat2,
   Rewind,
   Search,
   Settings,
@@ -45,7 +46,7 @@ type Route =
   | { name: 'story'; storyId: string }
   | { name: 'reader'; storyId: string; chapterNumber: number }
   | { name: 'me' }
-  | { name: 'audio' }
+  | { name: 'audio'; storyId?: string }
   | { name: 'library' };
 
 const now = () => new Date().toISOString();
@@ -61,7 +62,8 @@ function parseRoute(pathname = window.location.pathname): Route {
     return { name: 'reader', storyId: parts[1], chapterNumber: Number(parts[2]) || 1 };
   }
   if (parts[0] === 'me') return { name: 'me' };
-  if (parts[0] === 'search' || parts[0] === 'discover' || parts[0] === 'audio') return { name: 'audio' };
+  if (parts[0] === 'search' || parts[0] === 'discover') return { name: 'audio' };
+  if (parts[0] === 'audio') return { name: 'audio', storyId: parts[1] };
   if (parts[0] === 'library') return { name: 'library' };
   return { name: 'home' };
 }
@@ -123,6 +125,10 @@ function App() {
         navigate(`/story/${currentRoute.storyId}`);
         return;
       }
+      if (currentRoute.name === 'audio' && currentRoute.storyId) {
+        navigate('/audio');
+        return;
+      }
       if (currentRoute.name !== 'home') {
         navigate('/');
         return;
@@ -155,7 +161,7 @@ function App() {
           {route.name === 'home' && <HomePage />}
           {route.name === 'story' && <StoryDetailPage storyId={route.storyId} />}
           {route.name === 'me' && <MePage />}
-          {route.name === 'audio' && <AudioPage />}
+          {route.name === 'audio' && <AudioPage storyId={route.storyId} />}
           {route.name === 'library' && <LibraryPage />}
         </AppShell>
       )}
@@ -1422,6 +1428,37 @@ type AudioStory = {
   chapters: AudioChapter[];
 };
 
+type AudioProgress = {
+  storyId: string;
+  chapterNumber: number;
+  variantId: string;
+  currentTime: number;
+  duration: number;
+  updatedAt: string;
+};
+
+function audioProgressKey(storyId: string) {
+  const accountId = storage.getUser()?.id || 'guest';
+  return `leafnovel:audio-progress:${accountId}:${storyId}`;
+}
+
+function readAudioProgress(storyId: string): AudioProgress | null {
+  return storageSafeRead<AudioProgress | null>(audioProgressKey(storyId), null);
+}
+
+function writeAudioProgress(progress: AudioProgress) {
+  localStorage.setItem(audioProgressKey(progress.storyId), JSON.stringify(progress));
+}
+
+function storageSafeRead<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function audioManifestUrlFromUpdateUrl(updateUrl: string) {
   try {
     const url = new URL(updateUrl);
@@ -1457,6 +1494,7 @@ function normalizeAudioManifest(data: unknown, manifestUrl: string): AudioStory[
         return {
           ...chapter,
           audioUrl: resolveAudioUrl(chapter.audioUrl),
+          durationSeconds: chapter.durationSeconds ?? normalizedVariants[0]?.durationSeconds,
           variants: normalizedVariants,
         };
       }),
@@ -1471,11 +1509,24 @@ function formatAudioTime(value: number) {
   return `${minutes}:${seconds}`;
 }
 
-function AudioPage() {
-  const { stories } = useStories();
+function formatAudioBadge(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '';
+  const total = Math.round(value);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = String(total % 60).padStart(2, '0');
+  if (hours) return `${hours}:${String(minutes).padStart(2, '0')}:${seconds}`;
+  return `${minutes}:${seconds}`;
+}
+
+function audioStoryDuration(story: AudioStory) {
+  return story.chapters.reduce((total, chapter) => total + (chapter.durationSeconds || chapter.variants?.[0]?.durationSeconds || 0), 0);
+}
+
+function AudioPage({ storyId }: { storyId?: string }) {
   const [audioStories, setAudioStories] = useState<AudioStory[]>([]);
-  const [selectedStoryId, setSelectedStoryId] = useState('');
   const [selectedChapterNumber, setSelectedChapterNumber] = useState(0);
+  const [resumeProgress, setResumeProgress] = useState<AudioProgress | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -1489,7 +1540,6 @@ function AudioPage() {
           if (!list.length) continue;
           if (!mounted) return;
           setAudioStories(list);
-          setSelectedStoryId((current) => current || list[0]?.story?.id || '');
           return;
         } catch {
           // Try the next source.
@@ -1503,23 +1553,28 @@ function AudioPage() {
     };
   }, []);
 
-  const visibleAudioStories = audioStories.length
-    ? audioStories
-    : stories.map((story) => ({ story: { id: story.id, title: story.title, coverUrl: story.coverUrl, totalChapters: 0 }, chapters: [] }));
-  const effectiveSelectedStoryId = selectedStoryId || visibleAudioStories[0]?.story.id || '';
-  const selectedAudioStory = visibleAudioStories.find((item) => item.story.id === effectiveSelectedStoryId);
+  const selectedAudioStory = audioStories.find((item) => item.story.id === storyId);
   const selectedChapter =
     selectedAudioStory?.chapters.find((chapter) => chapter.chapterNumber === selectedChapterNumber) || selectedAudioStory?.chapters[0] || null;
+
+  useEffect(() => {
+    if (!storyId) return;
+    setResumeProgress(readAudioProgress(storyId));
+  }, [storyId]);
 
   useEffect(() => {
     if (!selectedAudioStory?.chapters.length) {
       setSelectedChapterNumber(0);
       return;
     }
-    setSelectedChapterNumber((current) =>
-      selectedAudioStory.chapters.some((chapter) => chapter.chapterNumber === current) ? current : selectedAudioStory.chapters[0].chapterNumber,
-    );
-  }, [selectedAudioStory?.story.id, selectedAudioStory?.chapters]);
+    setSelectedChapterNumber((current) => {
+      if (current && selectedAudioStory.chapters.some((chapter) => chapter.chapterNumber === current)) return current;
+      if (resumeProgress && selectedAudioStory.chapters.some((chapter) => chapter.chapterNumber === resumeProgress.chapterNumber)) {
+        return resumeProgress.chapterNumber;
+      }
+      return selectedAudioStory.chapters[0].chapterNumber;
+    });
+  }, [selectedAudioStory?.story.id, selectedAudioStory?.chapters, resumeProgress]);
 
   const selectedChapterIndex = selectedAudioStory?.chapters.findIndex((chapter) => chapter.chapterNumber === selectedChapter?.chapterNumber) ?? -1;
   const previousChapter = selectedAudioStory && selectedChapterIndex > 0 ? selectedAudioStory.chapters[selectedChapterIndex - 1] : null;
@@ -1527,48 +1582,89 @@ function AudioPage() {
     selectedAudioStory && selectedChapterIndex >= 0 && selectedChapterIndex < selectedAudioStory.chapters.length - 1
       ? selectedAudioStory.chapters[selectedChapterIndex + 1]
       : null;
+  const handleAudioProgress = useCallback((progress: AudioProgress) => {
+    writeAudioProgress(progress);
+    setResumeProgress(progress);
+  }, []);
+
+  if (!storyId) {
+    return (
+      <section className="space-y-5 px-5 pb-8 pt-[calc(22px+env(safe-area-inset-top))] md:px-8">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h1 className="text-[30px] font-semibold">Audio Book</h1>
+            <p className="mt-1 text-[15px] font-medium text-app-muted">Truyện có bản nghe</p>
+          </div>
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-app-primarySoft text-app-primaryDark">
+            <Headphones size={23} />
+          </span>
+        </div>
+
+        {audioStories.length ? (
+          <div className="space-y-5">
+            {audioStories.map((item) => {
+              const duration = formatAudioBadge(audioStoryDuration(item));
+              return (
+                <button
+                  type="button"
+                  key={item.story.id}
+                  onClick={() => navigate(`/audio/${item.story.id}`)}
+                  className="block w-full text-left active:scale-[0.99]"
+                >
+                  <div className="relative aspect-video overflow-hidden rounded-[18px] bg-white shadow-soft">
+                    <Cover story={item.story as Story} className="h-full w-full rounded-[18px]" />
+                    {duration && (
+                      <span className="absolute bottom-2 right-2 rounded-md bg-black/75 px-2 py-1 text-[12px] font-semibold text-white">
+                        {duration}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-2">
+                    <h2 className="line-clamp-2 text-[17px] font-semibold leading-snug">{item.story.title}</h2>
+                    <p className="mt-1 text-[13px] font-semibold text-app-muted">
+                      {item.chapters.length} chương audio
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyCard text="Chưa có truyện audio." />
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-5 px-5 pb-8 pt-[calc(22px+env(safe-area-inset-top))] md:px-8">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-[30px] font-semibold">Audio Book</h1>
-          <p className="mt-1 text-[15px] font-medium text-app-muted">Chuyên mục nghe truyện</p>
-        </div>
-        <span className="grid h-12 w-12 place-items-center rounded-full bg-app-primarySoft text-app-primaryDark">
-          <Headphones size={23} />
-        </span>
-      </div>
+      <button type="button" onClick={() => navigate('/audio')} className="flex min-h-10 items-center gap-2 text-[14px] font-semibold text-app-muted">
+        <ArrowLeft size={19} />
+        Audio
+      </button>
 
-      <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
-        {visibleAudioStories.map(({ story, chapters }) => (
-          <button
-            type="button"
-            key={story.id}
-            onClick={() => {
-              setSelectedStoryId(story.id);
-              setSelectedChapterNumber(0);
-            }}
-            className={`w-[210px] shrink-0 rounded-card p-3 text-left shadow-soft active:scale-[0.99] ${
-              effectiveSelectedStoryId === story.id ? 'bg-app-primarySoft text-app-primaryDark' : 'bg-white'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <Cover story={story as Story} className="h-16 w-12 rounded-2xl" />
-              <span className="min-w-0">
-                <span className="block truncate text-[16px] font-semibold">{story.title}</span>
-                <span className="mt-1 block text-[13px] font-semibold opacity-70">{chapters.length ? `${chapters.length} audio` : 'Chưa có audio'}</span>
+      {selectedAudioStory && (
+        <div>
+          <div className="relative aspect-video overflow-hidden rounded-[20px] bg-white shadow-soft">
+            <Cover story={selectedAudioStory.story as Story} className="h-full w-full rounded-[20px]" />
+            {formatAudioBadge(audioStoryDuration(selectedAudioStory)) && (
+              <span className="absolute bottom-2 right-2 rounded-md bg-black/75 px-2 py-1 text-[12px] font-semibold text-white">
+                {formatAudioBadge(audioStoryDuration(selectedAudioStory))}
               </span>
-            </div>
-          </button>
-        ))}
-      </div>
+            )}
+          </div>
+          <h1 className="mt-3 text-[26px] font-semibold leading-tight">{selectedAudioStory.story.title}</h1>
+          <p className="mt-1 text-[14px] font-semibold text-app-muted">
+            {selectedAudioStory.chapters.length} chương audio
+          </p>
+        </div>
+      )}
 
       <section className="rounded-card bg-white p-4 shadow-soft">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-[21px] font-semibold">{selectedAudioStory?.story.title || 'Chưa có audio'}</h2>
-            <p className="mt-1 text-[14px] font-medium text-app-muted">Chọn chương để nghe</p>
+            <h2 className="text-[21px] font-semibold">Danh sách chương</h2>
+            <p className="mt-1 text-[14px] font-medium text-app-muted">Chọn bản lồng tiếng hoặc audio only trong player</p>
           </div>
           <span className="grid h-10 w-10 place-items-center rounded-full bg-app-primarySoft text-app-primaryDark">
             <Headphones size={20} />
@@ -1595,9 +1691,14 @@ function AudioPage() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[16px] font-semibold">{chapter.title}</span>
                     <span className="mt-0.5 block text-[12px] font-semibold opacity-70">
-                      {chapter.variants?.length ? `${chapter.variants.length} bản nghe` : chapter.filename}
+                      {(chapter.variants || []).map((variant) => variant.label).join(' / ') || chapter.filename}
                     </span>
                   </span>
+                  {formatAudioBadge(chapter.durationSeconds || chapter.variants?.[0]?.durationSeconds || 0) && (
+                    <span className="rounded-md bg-black/75 px-2 py-1 text-[11px] font-semibold text-white">
+                      {formatAudioBadge(chapter.durationSeconds || chapter.variants?.[0]?.durationSeconds || 0)}
+                    </span>
+                  )}
                   <ChevronRight size={18} className="shrink-0 opacity-70" />
                 </button>
               ))}
@@ -1610,8 +1711,10 @@ function AudioPage() {
                 chapter={selectedChapter}
                 previousChapter={previousChapter}
                 nextChapter={nextChapter}
+                initialProgress={resumeProgress}
                 onPrevious={() => previousChapter && setSelectedChapterNumber(previousChapter.chapterNumber)}
                 onNext={() => nextChapter && setSelectedChapterNumber(nextChapter.chapterNumber)}
+                onProgress={handleAudioProgress}
               />
             )}
 
@@ -1639,21 +1742,27 @@ function AudioChapterPlayer({
   chapter,
   previousChapter,
   nextChapter,
+  initialProgress,
   onPrevious,
   onNext,
+  onProgress,
 }: {
   story: Pick<Story, 'id' | 'title' | 'coverUrl' | 'totalChapters'>;
   chapter: AudioChapter;
   previousChapter: AudioChapter | null;
   nextChapter: AudioChapter | null;
+  initialProgress: AudioProgress | null;
   onPrevious: () => void;
   onNext: () => void;
+  onProgress: (progress: AudioProgress) => void;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const lastProgressWriteRef = useRef(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [loop, setLoop] = useState(false);
   const variants = useMemo<AudioVariant[]>(
     () =>
       chapter.variants?.length
@@ -1664,6 +1773,7 @@ function AudioChapterPlayer({
   const [selectedVariantId, setSelectedVariantId] = useState(variants[0]?.id || 'main');
   const selectedVariant = variants.find((variant) => variant.id === selectedVariantId) || variants[0];
   const speedOptions = [0.75, 1, 1.25, 1.5, 2];
+  const waveformBars = [34, 58, 78, 44, 62, 86, 38, 74, 92, 50, 68, 84, 40, 70, 96, 46, 82, 64, 88, 52, 76, 90, 42, 66, 80];
 
   const seekBy = (seconds: number) => {
     const audio = audioRef.current;
@@ -1696,19 +1806,50 @@ function AudioChapterPlayer({
   }, [playbackRate]);
 
   useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.loop = loop;
+  }, [loop]);
+
+  useEffect(() => {
     setSelectedVariantId((current) => (variants.some((variant) => variant.id === current) ? current : variants[0]?.id || 'main'));
   }, [variants]);
+
+  useEffect(() => {
+    if (
+      initialProgress?.storyId === story.id &&
+      initialProgress.chapterNumber === chapter.chapterNumber &&
+      variants.some((variant) => variant.id === initialProgress.variantId)
+    ) {
+      setSelectedVariantId(initialProgress.variantId);
+    }
+  }, [chapter.chapterNumber, initialProgress, story.id, variants]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const syncTime = () => setCurrentTime(audio.currentTime || 0);
+    const syncTime = () => {
+      const nextTime = audio.currentTime || 0;
+      setCurrentTime(nextTime);
+      const timestamp = Date.now();
+      if (nextTime > 2 && selectedVariant && timestamp - lastProgressWriteRef.current > 2500) {
+        lastProgressWriteRef.current = timestamp;
+        onProgress({
+          storyId: story.id,
+          chapterNumber: chapter.chapterNumber,
+          variantId: selectedVariant.id,
+          currentTime: nextTime,
+          duration: Number.isFinite(audio.duration) ? audio.duration : duration,
+          updatedAt: now(),
+        });
+      }
+    };
     const syncDuration = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
     const syncPlaying = () => setPlaying(!audio.paused);
     const handleEnded = () => {
       setPlaying(false);
-      if (nextChapter) onNext();
+      if (!loop && nextChapter) onNext();
     };
 
     audio.addEventListener('timeupdate', syncTime);
@@ -1718,6 +1859,14 @@ function AudioChapterPlayer({
     audio.addEventListener('pause', syncPlaying);
     audio.addEventListener('ended', handleEnded);
     syncDuration();
+    if (
+      initialProgress?.storyId === story.id &&
+      initialProgress.chapterNumber === chapter.chapterNumber &&
+      initialProgress.variantId === selectedVariant?.id &&
+      initialProgress.currentTime > 2
+    ) {
+      audio.currentTime = initialProgress.currentTime;
+    }
     syncTime();
     syncPlaying();
 
@@ -1729,7 +1878,7 @@ function AudioChapterPlayer({
       audio.removeEventListener('pause', syncPlaying);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [selectedVariant?.audioUrl, nextChapter, onNext]);
+  }, [chapter.chapterNumber, duration, initialProgress, loop, onNext, onProgress, selectedVariant, selectedVariant?.audioUrl, story.id, nextChapter]);
 
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
@@ -1772,15 +1921,18 @@ function AudioChapterPlayer({
   return (
     <article className="rounded-card bg-app-bg p-4">
       <audio ref={audioRef} src={selectedVariant?.audioUrl} preload="metadata" />
+      <div className="mx-auto mb-4 max-w-[360px]">
+        <div className={`audio-cover-stage ${playing ? 'is-playing' : ''}`}>
+          <Cover story={story as Story} className="h-full w-full rounded-[28px]" />
+        </div>
+      </div>
+
       <div className="mb-4 flex items-center gap-3">
-        <div className={`audio-disc h-20 w-20 shrink-0 ${playing ? 'is-playing' : ''}`}>
-          <Cover story={story as Story} className="h-full w-full rounded-full" />
-        </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-app-muted">Đang nghe</p>
-          <h3 className="mt-1 line-clamp-2 text-[18px] font-semibold leading-tight">{chapter.title}</h3>
-          <p className="mt-1 truncate text-[13px] font-semibold text-app-muted">{story.title} - {selectedVariant?.label}</p>
+          <h3 className="line-clamp-2 text-[22px] font-semibold leading-tight">{chapter.title}</h3>
+          <p className="mt-1 truncate text-[14px] font-semibold text-app-muted">{story.title}</p>
         </div>
+        <span className="rounded-full bg-white px-3 py-2 text-[12px] font-semibold text-app-muted shadow-soft">{selectedVariant?.label}</span>
       </div>
 
       {variants.length > 1 && (
@@ -1822,7 +1974,7 @@ function AudioChapterPlayer({
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-center gap-3">
+      <div className="mt-5 flex items-center justify-between gap-3 px-1">
         <button
           type="button"
           onClick={onPrevious}
@@ -1835,7 +1987,7 @@ function AudioChapterPlayer({
         <button type="button" onClick={() => seekBy(-15)} className="grid h-11 w-11 place-items-center rounded-full bg-white text-app-muted shadow-soft" aria-label="Tua lùi 15 giây">
           <Rewind size={19} />
         </button>
-        <button type="button" onClick={() => void togglePlay()} className="grid h-14 w-14 place-items-center rounded-full bg-app-primary text-white shadow-soft" aria-label="Phát hoặc tạm dừng">
+        <button type="button" onClick={() => void togglePlay()} className="grid h-16 w-16 place-items-center rounded-full bg-app-primary text-white shadow-float" aria-label="Phát hoặc tạm dừng">
           {playing ? <Pause size={25} /> : <Play size={25} />}
         </button>
         <button type="button" onClick={() => seekBy(15)} className="grid h-11 w-11 place-items-center rounded-full bg-white text-app-muted shadow-soft" aria-label="Tua tới 15 giây">
@@ -1849,6 +2001,14 @@ function AudioChapterPlayer({
           aria-label="Chương sau"
         >
           <ChevronRight size={22} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setLoop((value) => !value)}
+          className={`grid h-11 w-11 place-items-center rounded-full shadow-soft ${loop ? 'bg-app-primary text-white' : 'bg-white text-app-muted'}`}
+          aria-label="Lặp lại"
+        >
+          <Repeat2 size={19} />
         </button>
       </div>
 
@@ -1864,6 +2024,12 @@ function AudioChapterPlayer({
           >
             {speed}x
           </button>
+        ))}
+      </div>
+
+      <div className="audio-waveform mt-5" aria-hidden="true">
+        {waveformBars.map((height, index) => (
+          <span key={`${height}-${index}`} style={{ height: `${height}%` }} />
         ))}
       </div>
 

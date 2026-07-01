@@ -14,18 +14,21 @@
           "title": "Chương 1: Đoạn đường vắng",
           "filename": "001-long.mp3",
           "audioUrl": "/audio/biet-thu-ven-bien/001-long.mp3",
+          "durationSeconds": 465,
           "variants": [
             {
               "id": "long",
               "label": "Lồng",
               "filename": "001-long.mp3",
-              "audioUrl": "/audio/biet-thu-ven-bien/001-long.mp3"
+              "audioUrl": "/audio/biet-thu-ven-bien/001-long.mp3",
+              "durationSeconds": 465
             },
             {
               "id": "tell",
               "label": "Kể truyện",
               "filename": "001-tell.mp3",
-              "audioUrl": "/audio/biet-thu-ven-bien/001-tell.mp3"
+              "audioUrl": "/audio/biet-thu-ven-bien/001-tell.mp3",
+              "durationSeconds": 478
             }
           ]
         }
