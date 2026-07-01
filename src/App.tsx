@@ -21,14 +21,9 @@ import {
   Pause,
   Play,
   Plus,
-  Repeat2,
-  Rewind,
   Search,
   Settings,
   Share2,
-  SkipBack,
-  SkipForward,
-  SlidersHorizontal,
   UserRound,
   X,
 } from 'lucide-react';
@@ -37,6 +32,7 @@ import { api } from './lib/api';
 import { appInfo } from './lib/appInfo';
 import { downloadApk, getDeviceProfile } from './lib/appUpdater';
 import { officialUpdateUrl, storage, syncAccounts } from './lib/storage';
+import { useAudioPlayerStore, type AudioTrack } from './store/useAudioPlayerStore';
 import { useLibraryStore } from './store/useLibraryStore';
 import { chapterLabel, clamp, formatDateTime, formatMinutes } from './utils/format';
 import { chapterToBlocks } from './utils/markdown';
@@ -168,7 +164,7 @@ function App() {
       {route.name === 'reader' ? (
         <ReaderPage storyId={route.storyId} chapterNumber={route.chapterNumber} />
       ) : (
-        <AppShell active={route.name} darkMode={darkMode}>
+        <AppShell route={route} darkMode={darkMode}>
           {route.name === 'home' && <HomePage />}
           {route.name === 'story' && <StoryDetailPage storyId={route.storyId} />}
           {route.name === 'me' && <MePage />}
@@ -180,11 +176,12 @@ function App() {
   );
 }
 
-function AppShell({ active, children, darkMode }: { active: Route['name']; children: ReactNode; darkMode: boolean }) {
+function AppShell({ route, children, darkMode }: { route: Route; children: ReactNode; darkMode: boolean }) {
   return (
     <main className={`app-shell mx-auto min-h-screen w-full max-w-[480px] overflow-hidden pb-[calc(92px+env(safe-area-inset-bottom))] shadow-[0_0_60px_rgba(16,24,40,0.08)] md:max-w-none md:pb-[calc(104px+env(safe-area-inset-bottom))] ${darkMode ? 'bg-[#0B111B] text-[#F8FAFC]' : 'bg-app-bg'}`}>
       {children}
-      <BottomNav active={active} darkMode={darkMode} />
+      <MiniPlayer route={route} darkMode={darkMode} />
+      <BottomNav active={route.name} darkMode={darkMode} />
     </main>
   );
 }
@@ -242,6 +239,62 @@ function IconButton({
     >
       {children}
     </button>
+  );
+}
+
+function MiniPlayer({ route, darkMode }: { route: Route; darkMode: boolean }) {
+  const track = useAudioPlayerStore((state) => state.currentTrack);
+  const isPlaying = useAudioPlayerStore((state) => state.isPlaying);
+  const currentTime = useAudioPlayerStore((state) => state.currentTime);
+  const duration = useAudioPlayerStore((state) => state.duration);
+  const toggle = useAudioPlayerStore((state) => state.toggle);
+  const isFullPlayer = route.name === 'audio' && Boolean(route.chapterNumber);
+
+  if (!track || isFullPlayer) return null;
+
+  const total = duration || track.variant.durationSeconds || 0;
+  const percent = total ? clamp((currentTime / total) * 100, 0, 100) : 0;
+
+  return (
+    <div className="fixed inset-x-0 bottom-[calc(82px+env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-[480px] px-3 md:max-w-none md:px-8">
+      <div
+        className={`audio-mini-player overflow-hidden rounded-[22px] border shadow-float backdrop-blur-xl ${
+          darkMode ? 'border-white/10 bg-[#101826]/95 text-white' : 'border-white/70 bg-white/95 text-app-text'
+        }`}
+      >
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => navigate(audioVariantPath(track.story.id, track.chapter, track.variant))}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            navigate(audioVariantPath(track.story.id, track.chapter, track.variant));
+          }}
+          className="flex min-h-[66px] w-full items-center gap-3 px-3 py-2 text-left"
+        >
+          <img src={track.coverUrl} alt="" className="h-12 w-12 shrink-0 rounded-[14px] bg-black/10 object-cover" loading="lazy" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[14px] font-semibold">{track.title}</span>
+            <span className={`mt-0.5 block truncate text-[12px] font-medium ${darkMode ? 'text-white/50' : 'text-app-muted'}`}>{track.subtitle}</span>
+          </span>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void toggle();
+            }}
+            className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${darkMode ? 'bg-white text-[#071017]' : 'bg-[#071017] text-white'}`}
+            aria-label="Phát hoặc tạm dừng"
+          >
+            {isPlaying ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" className="ml-0.5" />}
+          </button>
+        </div>
+        <div className={`h-1 ${darkMode ? 'bg-white/10' : 'bg-slate-200'}`}>
+          <div className="h-full bg-app-primary transition-[width] duration-300" style={{ width: `${percent}%` }} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1457,10 +1510,6 @@ function readAudioProgress(storyId: string): AudioProgress | null {
   return storageSafeRead<AudioProgress | null>(audioProgressKey(storyId), null);
 }
 
-function writeAudioProgress(progress: AudioProgress) {
-  localStorage.setItem(audioProgressKey(progress.storyId), JSON.stringify(progress));
-}
-
 function storageSafeRead<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
@@ -1591,17 +1640,6 @@ function AudioPage({ storyId, chapterNumber, variantId }: { storyId?: string; ch
     setResumeProgress(readAudioProgress(storyId));
   }, [storyId]);
 
-  const selectedChapterIndex = selectedAudioStory?.chapters.findIndex((chapter) => chapter.chapterNumber === selectedChapter?.chapterNumber) ?? -1;
-  const previousChapter = selectedAudioStory && selectedChapterIndex > 0 ? selectedAudioStory.chapters[selectedChapterIndex - 1] : null;
-  const nextChapter =
-    selectedAudioStory && selectedChapterIndex >= 0 && selectedChapterIndex < selectedAudioStory.chapters.length - 1
-      ? selectedAudioStory.chapters[selectedChapterIndex + 1]
-      : null;
-  const handleAudioProgress = useCallback((progress: AudioProgress) => {
-    writeAudioProgress(progress);
-    setResumeProgress(progress);
-  }, []);
-
   if (!storyId) {
     return (
       <section className="space-y-5 px-5 pb-8 pt-[calc(22px+env(safe-area-inset-top))] md:px-8">
@@ -1654,40 +1692,13 @@ function AudioPage({ storyId, chapterNumber, variantId }: { storyId?: string; ch
   if (chapterNumber && selectedAudioStory && selectedChapter) {
     const variants = audioChapterVariants(selectedChapter);
     const selectedVariant = variants.find((variant) => variant.id === variantId) || variants[0];
-    const variantForChapter = (chapter: AudioChapter | null) => {
-      if (!chapter) return null;
-      const chapterVariants = audioChapterVariants(chapter);
-      return chapterVariants.find((variant) => variant.id === selectedVariant.id) || chapterVariants[0];
-    };
-    const previousVariant = variantForChapter(previousChapter);
-    const nextVariant = variantForChapter(nextChapter);
 
     return (
-      <section className="space-y-5 px-5 pb-8 pt-[calc(22px+env(safe-area-inset-top))] md:px-8">
-        <button
-          type="button"
-          onClick={() => navigate(`/audio/${selectedAudioStory.story.id}`)}
-          className="flex min-h-10 items-center gap-2 text-[14px] font-semibold text-app-muted"
-        >
-          <ArrowLeft size={19} />
-          Danh sách chương
-        </button>
-
-        <AudioChapterPlayer
-          key={`${selectedChapter.storyId}-${selectedChapter.chapterNumber}-${selectedVariant.id}`}
-          story={selectedAudioStory.story}
-          chapter={selectedChapter}
-          variantId={selectedVariant.id}
-          previousChapter={previousChapter}
-          nextChapter={nextChapter}
-          initialProgress={resumeProgress}
-          onPrevious={() =>
-            previousChapter && previousVariant && navigate(audioVariantPath(selectedAudioStory.story.id, previousChapter, previousVariant))
-          }
-          onNext={() => nextChapter && nextVariant && navigate(audioVariantPath(selectedAudioStory.story.id, nextChapter, nextVariant))}
-          onProgress={handleAudioProgress}
-        />
-      </section>
+      <AudioPlayerScreen
+        audioStory={selectedAudioStory}
+        chapterNumber={chapterNumber}
+        variantId={selectedVariant.id}
+      />
     );
   }
 
@@ -1778,6 +1789,13 @@ function AudioPage({ storyId, chapterNumber, variantId }: { storyId?: string; ch
                 key={variant.id}
                 onClick={() => {
                   setPendingChapter(null);
+                  useAudioPlayerStore.getState().loadQueue({
+                    story: selectedAudioStory.story,
+                    chapters: selectedAudioStory.chapters,
+                    chapterNumber: pendingChapter.chapterNumber,
+                    variantId: variant.id,
+                    autoplay: true,
+                  });
                   navigate(audioVariantPath(selectedAudioStory.story.id, pendingChapter, variant));
                 }}
                 className="flex min-h-[64px] w-full items-center justify-between rounded-[20px] bg-white px-4 text-left shadow-soft active:scale-[0.99]"
@@ -1804,279 +1822,216 @@ function AudioPage({ storyId, chapterNumber, variantId }: { storyId?: string; ch
   );
 }
 
-function AudioChapterPlayer({
-  story,
-  chapter,
-  variantId,
-  previousChapter,
-  nextChapter,
-  initialProgress,
-  onPrevious,
-  onNext,
-  onProgress,
-}: {
-  story: Pick<Story, 'id' | 'title' | 'coverUrl' | 'totalChapters'>;
-  chapter: AudioChapter;
-  variantId: string;
-  previousChapter: AudioChapter | null;
-  nextChapter: AudioChapter | null;
-  initialProgress: AudioProgress | null;
-  onPrevious: () => void;
-  onNext: () => void;
-  onProgress: (progress: AudioProgress) => void;
-}) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const lastProgressWriteRef = useRef(0);
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [playbackRate, setPlaybackRate] = useState(1);
-  const [loop, setLoop] = useState(false);
-  const variants = useMemo<AudioVariant[]>(
-    () => audioChapterVariants(chapter),
-    [chapter],
-  );
-  const selectedVariant = variants.find((variant) => variant.id === variantId) || variants[0];
-  const speedOptions = [0.75, 1, 1.25, 1.5, 2];
-  const waveformBars = [34, 58, 78, 44, 62, 86, 38, 74, 92, 50, 68, 84, 40, 70, 96, 46, 82, 64, 88, 52, 76, 90, 42, 66, 80];
-
-  const seekBy = (seconds: number) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.currentTime = clamp(audio.currentTime + seconds, 0, audio.duration || 0);
-    setCurrentTime(audio.currentTime);
-  };
-
-  const seekTo = (value: number) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.currentTime = clamp(value, 0, audio.duration || 0);
-    setCurrentTime(audio.currentTime);
-  };
-
-  const togglePlay = async () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (audio.paused) {
-      await audio.play();
-    } else {
-      audio.pause();
-    }
-  };
+function AudioPlayerScreen({ audioStory, chapterNumber, variantId }: { audioStory: AudioStory; chapterNumber: number; variantId: string }) {
+  const loadQueue = useAudioPlayerStore((state) => state.loadQueue);
+  const currentTrack = useAudioPlayerStore((state) => state.currentTrack);
+  const queue = useAudioPlayerStore((state) => state.queue);
+  const currentIndex = useAudioPlayerStore((state) => state.currentIndex);
+  const isPlaying = useAudioPlayerStore((state) => state.isPlaying);
+  const currentTime = useAudioPlayerStore((state) => state.currentTime);
+  const duration = useAudioPlayerStore((state) => state.duration);
+  const playbackSpeed = useAudioPlayerStore((state) => state.playbackSpeed);
+  const toggle = useAudioPlayerStore((state) => state.toggle);
+  const seek = useAudioPlayerStore((state) => state.seek);
+  const cycleSpeed = useAudioPlayerStore((state) => state.cycleSpeed);
+  const setSpeed = useAudioPlayerStore((state) => state.setSpeed);
+  const playTrackAt = useAudioPlayerStore((state) => state.playTrackAt);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.playbackRate = playbackRate;
-  }, [playbackRate]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.loop = loop;
-  }, [loop]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const syncTime = () => {
-      const nextTime = audio.currentTime || 0;
-      setCurrentTime(nextTime);
-      const timestamp = Date.now();
-      if (nextTime > 2 && selectedVariant && timestamp - lastProgressWriteRef.current > 2500) {
-        lastProgressWriteRef.current = timestamp;
-        onProgress({
-          storyId: story.id,
-          chapterNumber: chapter.chapterNumber,
-          variantId: selectedVariant.id,
-          currentTime: nextTime,
-          duration: Number.isFinite(audio.duration) ? audio.duration : duration,
-          updatedAt: now(),
-        });
-      }
-    };
-    const syncDuration = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
-    const syncPlaying = () => setPlaying(!audio.paused);
-    const handleEnded = () => {
-      setPlaying(false);
-      if (!loop && nextChapter) onNext();
-    };
-
-    audio.addEventListener('timeupdate', syncTime);
-    audio.addEventListener('loadedmetadata', syncDuration);
-    audio.addEventListener('durationchange', syncDuration);
-    audio.addEventListener('play', syncPlaying);
-    audio.addEventListener('pause', syncPlaying);
-    audio.addEventListener('ended', handleEnded);
-    syncDuration();
-    if (
-      initialProgress?.storyId === story.id &&
-      initialProgress.chapterNumber === chapter.chapterNumber &&
-      initialProgress.variantId === selectedVariant?.id &&
-      initialProgress.currentTime > 2
-    ) {
-      audio.currentTime = initialProgress.currentTime;
-    }
-    syncTime();
-    syncPlaying();
-
-    return () => {
-      audio.removeEventListener('timeupdate', syncTime);
-      audio.removeEventListener('loadedmetadata', syncDuration);
-      audio.removeEventListener('durationchange', syncDuration);
-      audio.removeEventListener('play', syncPlaying);
-      audio.removeEventListener('pause', syncPlaying);
-      audio.removeEventListener('ended', handleEnded);
-    };
-  }, [chapter.chapterNumber, duration, initialProgress, loop, onNext, onProgress, selectedVariant, selectedVariant?.audioUrl, story.id, nextChapter]);
-
-  useEffect(() => {
-    if (!('mediaSession' in navigator)) return;
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: `${chapter.title} - ${audioVariantUiLabel(selectedVariant)}`,
-      artist: story.title,
-      album: 'Leaf Novel',
-      artwork: story.coverUrl ? [{ src: story.coverUrl, sizes: '512x512', type: 'image/png' }] : undefined,
+    loadQueue({
+      story: audioStory.story,
+      chapters: audioStory.chapters,
+      chapterNumber,
+      variantId,
+      autoplay: false,
     });
+  }, [audioStory.chapters, audioStory.story, chapterNumber, loadQueue, variantId]);
 
-    const setHandler = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
-      try {
-        navigator.mediaSession.setActionHandler(action, handler);
-      } catch {
-        // Some Android WebView versions do not expose every media action.
-      }
-    };
+  const selectedChapter = audioStory.chapters.find((chapter) => chapter.chapterNumber === chapterNumber) || audioStory.chapters[0];
+  const selectedVariant = selectedChapter ? audioChapterVariants(selectedChapter).find((variant) => variant.id === variantId) || audioChapterVariants(selectedChapter)[0] : null;
+  const currentRouteTrack =
+    currentTrack?.story.id === audioStory.story.id &&
+    currentTrack.chapter.chapterNumber === chapterNumber &&
+    currentTrack.variant.id === variantId
+      ? currentTrack
+      : null;
+  const displayTrack: AudioTrack | null =
+    currentRouteTrack ||
+    (selectedChapter && selectedVariant
+      ? {
+          story: audioStory.story,
+          chapter: selectedChapter,
+          variant: selectedVariant,
+          index: Math.max(0, audioStory.chapters.findIndex((chapter) => chapter.chapterNumber === selectedChapter.chapterNumber)),
+          title: selectedChapter.title,
+          subtitle: `${audioStory.story.title} - ${audioVariantUiLabel(selectedVariant)}`,
+          coverUrl: audioStory.story.coverUrl,
+        }
+      : null);
+  const maxDuration = duration || displayTrack?.variant.durationSeconds || 0;
 
-    setHandler('play', () => void audioRef.current?.play());
-    setHandler('pause', () => audioRef.current?.pause());
-    setHandler('seekbackward', () => seekBy(-15));
-    setHandler('seekforward', () => seekBy(15));
-    setHandler('previoustrack', previousChapter ? onPrevious : null);
-    setHandler('nexttrack', nextChapter ? onNext : null);
-    setHandler('seekto', (details) => {
-      if (typeof details.seekTime === 'number') seekTo(details.seekTime);
-    });
-
-    return () => {
-      setHandler('play', null);
-      setHandler('pause', null);
-      setHandler('seekbackward', null);
-      setHandler('seekforward', null);
-      setHandler('previoustrack', null);
-      setHandler('nexttrack', null);
-      setHandler('seekto', null);
-    };
-  }, [chapter.title, selectedVariant?.label, story.title, story.coverUrl, previousChapter, nextChapter, onPrevious, onNext]);
+  if (!displayTrack) return <EmptyCard text="Chưa tìm thấy audio cho chương này." />;
 
   return (
-    <article className="rounded-card bg-app-bg p-4">
-      <audio ref={audioRef} src={selectedVariant?.audioUrl} preload="metadata" />
-      <div className="mx-auto mb-4 max-w-[360px]">
-        <div className={`audio-cover-stage ${playing ? 'is-playing' : ''}`}>
-          <Cover story={story as Story} className="h-full w-full rounded-[28px]" />
-        </div>
-      </div>
-
-      <div className="mb-4 flex items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <h3 className="line-clamp-2 text-[22px] font-semibold leading-tight">{chapter.title}</h3>
-          <p className="mt-1 truncate text-[14px] font-semibold text-app-muted">{story.title}</p>
-        </div>
-        <span className="rounded-full bg-white px-3 py-2 text-[12px] font-semibold text-app-muted shadow-soft">{audioVariantUiLabel(selectedVariant)}</span>
-      </div>
-
-      <div className="space-y-2">
-        <input
-          type="range"
-          min={0}
-          max={duration || 0}
-          step={1}
-          value={Math.min(currentTime, duration || currentTime)}
-          onChange={(event) => seekTo(Number(event.target.value))}
-          className="h-2 w-full accent-app-primary"
-          aria-label="Tua audio"
-        />
-        <div className="flex items-center justify-between text-[12px] font-semibold text-app-muted">
-          <span>{formatAudioTime(currentTime)}</span>
-          <span>{formatAudioTime(duration)}</span>
-        </div>
-      </div>
-
-      <div className="mt-5 flex items-center justify-between gap-3 px-1">
-        <button
-          type="button"
-          onClick={onPrevious}
-          disabled={!previousChapter}
-          className="grid h-11 w-11 place-items-center rounded-full bg-white text-app-muted shadow-soft disabled:opacity-35"
-          aria-label="Chương trước"
-        >
-          <SkipBack size={20} />
-        </button>
-        <button type="button" onClick={() => seekBy(-15)} className="grid h-11 w-11 place-items-center rounded-full bg-white text-app-muted shadow-soft" aria-label="Tua lùi 15 giây">
-          <Rewind size={19} />
-        </button>
-        <button type="button" onClick={() => void togglePlay()} className="grid h-16 w-16 place-items-center rounded-full bg-app-primary text-white shadow-float" aria-label="Phát hoặc tạm dừng">
-          {playing ? <Pause size={25} /> : <Play size={25} />}
-        </button>
-        <button type="button" onClick={() => seekBy(15)} className="grid h-11 w-11 place-items-center rounded-full bg-white text-app-muted shadow-soft" aria-label="Tua tới 15 giây">
-          <SkipForward size={19} />
-        </button>
-        <button
-          type="button"
-          onClick={onNext}
-          disabled={!nextChapter}
-          className="grid h-11 w-11 place-items-center rounded-full bg-white text-app-muted shadow-soft disabled:opacity-35"
-          aria-label="Chương sau"
-        >
-          <ChevronRight size={22} />
-        </button>
-        <button
-          type="button"
-          onClick={() => setLoop((value) => !value)}
-          className={`grid h-11 w-11 place-items-center rounded-full shadow-soft ${loop ? 'bg-app-primary text-white' : 'bg-white text-app-muted'}`}
-          aria-label="Lặp lại"
-        >
-          <Repeat2 size={19} />
-        </button>
-      </div>
-
-      <div className="mt-4 grid grid-cols-5 gap-2">
-        {speedOptions.map((speed) => (
+    <section className="audio-player-page min-h-screen overflow-y-auto bg-[#071017] px-5 pb-[calc(122px+env(safe-area-inset-bottom))] pt-[calc(16px+env(safe-area-inset-top))] text-white md:px-8">
+      <div className="mx-auto flex w-full max-w-[520px] flex-col">
+        <div className="flex min-h-11 items-center justify-between">
           <button
             type="button"
-            key={speed}
-            onClick={() => setPlaybackRate(speed)}
-            className={`min-h-10 rounded-full text-[13px] font-semibold ${
-              playbackRate === speed ? 'bg-app-primary text-white' : 'bg-white text-app-muted'
-            }`}
+            onClick={() => navigate(`/audio/${audioStory.story.id}`)}
+            className="grid h-10 w-10 place-items-center rounded-full bg-white/8 text-white/80 active:scale-95"
+            aria-label="Thu nhỏ player"
           >
-            {speed}x
+            <ArrowLeft size={20} />
           </button>
-        ))}
-      </div>
-
-      <div className="audio-waveform mt-5" aria-hidden="true">
-        {waveformBars.map((height, index) => (
-          <span key={`${height}-${index}`} style={{ height: `${height}%` }} />
-        ))}
-      </div>
-
-      {playing && (
-        <div className="audio-island fixed inset-x-0 top-[calc(10px+env(safe-area-inset-top))] z-[70] mx-auto flex w-[min(92vw,420px)] items-center gap-3 rounded-full bg-[#071017]/92 px-3 py-2 text-white shadow-float backdrop-blur">
-          <div className="audio-disc is-playing h-10 w-10 shrink-0">
-            <Cover story={story as Story} className="h-full w-full rounded-full" />
+          <div className="text-center">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Đang phát</p>
+            <p className="mt-0.5 max-w-[210px] truncate text-[13px] font-semibold text-white/85">{audioVariantUiLabel(displayTrack.variant)}</p>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-semibold">{chapter.title}</p>
-            <p className="truncate text-[11px] font-medium text-white/65">{audioVariantUiLabel(selectedVariant)} - {formatAudioTime(currentTime)} / {formatAudioTime(duration)}</p>
-          </div>
-          <button type="button" onClick={() => void togglePlay()} className="grid h-9 w-9 place-items-center rounded-full bg-white/12" aria-label="Tạm dừng">
-            <Pause size={18} />
-          </button>
+          <span className="h-10 w-10" />
         </div>
-      )}
-    </article>
+
+        <CoverSection track={displayTrack} isPlaying={isPlaying} />
+        <AudioInfoSection track={displayTrack} />
+        <ProgressSection currentTime={currentTime} duration={maxDuration} onSeek={seek} />
+        <CenterControls isPlaying={isPlaying} playbackSpeed={playbackSpeed} onToggle={() => void toggle()} onCycleSpeed={cycleSpeed} onResetSpeed={() => setSpeed(1)} />
+        <NextChaptersSection
+          queue={currentRouteTrack ? queue : []}
+          currentIndex={currentRouteTrack ? currentIndex : 0}
+          onSelect={(track) => {
+            playTrackAt(track.index, true);
+            navigate(audioVariantPath(track.story.id, track.chapter, track.variant));
+          }}
+        />
+      </div>
+    </section>
+  );
+}
+
+function CoverSection({ track, isPlaying }: { track: AudioTrack; isPlaying: boolean }) {
+  return (
+    <div className="mx-auto mt-7 w-full max-w-[350px]">
+      <div className={`audio-player-cover ${isPlaying ? 'is-playing' : ''}`}>
+        <img src={track.coverUrl} alt={track.story.title} className="h-full w-full object-contain" loading="lazy" />
+      </div>
+    </div>
+  );
+}
+
+function AudioInfoSection({ track }: { track: AudioTrack }) {
+  return (
+    <div className="mt-7 text-center">
+      <h1 className="mx-auto line-clamp-2 max-w-[440px] text-[25px] font-semibold leading-tight text-white">{track.title}</h1>
+      <p className="mt-2 truncate text-[14px] font-medium text-white/55">{track.subtitle}</p>
+    </div>
+  );
+}
+
+function ProgressSection({ currentTime, duration, onSeek }: { currentTime: number; duration: number; onSeek: (time: number) => void }) {
+  return (
+    <div className="mt-7">
+      <input
+        type="range"
+        min={0}
+        max={duration || 0}
+        step={1}
+        value={Math.min(currentTime, duration || currentTime)}
+        onChange={(event) => onSeek(Number(event.target.value))}
+        className="audio-progress w-full"
+        aria-label="Tua audio"
+      />
+      <div className="mt-2 flex items-center justify-between text-[12px] font-semibold text-white/45">
+        <span>{formatAudioTime(currentTime)}</span>
+        <span>{formatAudioTime(duration)}</span>
+      </div>
+    </div>
+  );
+}
+
+function CenterControls({
+  isPlaying,
+  playbackSpeed,
+  onToggle,
+  onCycleSpeed,
+  onResetSpeed,
+}: {
+  isPlaying: boolean;
+  playbackSpeed: number;
+  onToggle: () => void;
+  onCycleSpeed: () => void;
+  onResetSpeed: () => void;
+}) {
+  return (
+    <div className="mt-8 flex flex-col items-center gap-5">
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`audio-play-button grid h-[82px] w-[82px] place-items-center rounded-full bg-white text-[#071017] shadow-[0_22px_60px_rgba(0,0,0,0.42)] active:scale-95 ${isPlaying ? 'is-playing' : ''}`}
+        aria-label="Phát hoặc tạm dừng"
+      >
+        {isPlaying ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" className="ml-1" />}
+      </button>
+      <SpeedControl speed={playbackSpeed} onCycle={onCycleSpeed} onReset={onResetSpeed} />
+    </div>
+  );
+}
+
+function SpeedControl({ speed, onCycle, onReset }: { speed: number; onCycle: () => void; onReset: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onCycle}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onReset();
+      }}
+      className="min-h-11 min-w-[86px] rounded-full border border-white/12 bg-white/8 px-5 text-[15px] font-semibold text-white backdrop-blur active:scale-95"
+      aria-label="Tốc độ phát"
+      title="Bấm để đổi tốc độ, giữ lâu để về 1x"
+    >
+      {speed}x
+    </button>
+  );
+}
+
+function NextChaptersSection({ queue, currentIndex, onSelect }: { queue: AudioTrack[]; currentIndex: number; onSelect: (track: AudioTrack) => void }) {
+  if (!queue.length) return null;
+  const items = queue.slice(Math.max(0, currentIndex)).slice(0, 8);
+
+  return (
+    <section className="mt-10 rounded-[28px] bg-white/[0.06] p-4 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <h2 className="text-[18px] font-semibold">Chương tiếp theo</h2>
+          <p className="mt-0.5 text-[12px] font-medium text-white/45">Tiếp tục nghe trong cùng bản {queue[currentIndex]?.variant ? audioVariantUiLabel(queue[currentIndex].variant) : 'Audio'}</p>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {items.map((track) => {
+          const active = track.index === currentIndex;
+          const listened = track.index < currentIndex;
+          return (
+            <button
+              type="button"
+              key={`${track.story.id}-${track.chapter.chapterNumber}-${track.variant.id}`}
+              onClick={() => onSelect(track)}
+              className={`flex min-h-[72px] w-full items-center gap-3 rounded-[20px] p-2.5 text-left transition active:scale-[0.99] ${
+                active ? 'bg-white/14' : 'bg-white/[0.04]'
+              }`}
+            >
+              <img src={track.coverUrl} alt="" className="h-12 w-12 shrink-0 rounded-[14px] bg-black/30 object-cover" loading="lazy" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-semibold text-white">{track.title}</span>
+                <span className="mt-0.5 block text-[12px] font-medium text-white/45">
+                  {active ? 'Đang phát' : listened ? 'Đã nghe' : audioVariantUiLabel(track.variant)}
+                </span>
+              </span>
+              <span className="shrink-0 text-[12px] font-semibold text-white/50">{formatAudioBadge(track.variant.durationSeconds || track.chapter.durationSeconds || 0)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
