@@ -28,7 +28,8 @@ export const api = {
   story: async (id: string) => (await api.stories()).find((story) => story.id === id) ?? null,
   chapters: async (id: string) => {
     const serverChapters = await request<Chapter[]>(`/api/stories/${id}/chapters`, []);
-    return localLibrary.chapters(id, serverChapters.length ? serverChapters : mockChapters(id));
+    const chapters = await localLibrary.chapters(id, serverChapters);
+    return chapters.length ? chapters : mockChapters(id);
   },
   chapter: async (id: string, chapterNumber: number) => {
     const localChapter = localLibrary.chapter(id, chapterNumber);

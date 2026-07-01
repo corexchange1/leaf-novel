@@ -19,6 +19,7 @@ export type Chapter = {
   filename: string;
   contentFormat?: 'markdown' | 'html';
   imageUrl?: string;
+  thumbnailUrl?: string;
 };
 
 export type ChapterContent = Chapter & {

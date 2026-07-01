@@ -33,6 +33,7 @@ type RemoteMeta = {
 type UpdateIndex = {
   dataVersion?: string;
   archiveUrl?: string;
+  packUrl?: string;
   sha256?: string;
   latestApp?: {
     versionName?: string;
@@ -224,6 +225,7 @@ function normalizeRemoteStories(data: unknown, updateUrl: string): BundledStory[
       chapters: item.chapters.map((chapter) => ({
         ...chapter,
         imageUrl: resolveRemoteAsset(chapter.imageUrl, publicBase) || chapter.imageUrl,
+        thumbnailUrl: resolveRemoteAsset(chapter.thumbnailUrl, publicBase) || chapter.thumbnailUrl,
       })),
     }));
 }
@@ -316,6 +318,7 @@ async function storiesFromPack(buffer: ArrayBuffer): Promise<BundledStory[]> {
           const normalizedChapter = {
             ...chapter,
             imageUrl: (await dataUrlFromZip(zip, chapter.imageUrl)) || chapter.imageUrl,
+            thumbnailUrl: (await dataUrlFromZip(zip, chapter.thumbnailUrl)) || chapter.thumbnailUrl,
           };
           return {
             ...normalizedChapter,
@@ -514,12 +517,13 @@ export const localLibrary = {
     const index = data as UpdateIndex;
     const appUpdate = appUpdateFromIndex(index);
 
-    if (index.archiveUrl && index.dataVersion) {
+    const packUrl = index.archiveUrl || index.packUrl;
+    if (packUrl && index.dataVersion) {
       const currentMeta = readRemoteMeta();
       if (currentMeta.dataVersion === index.dataVersion) {
         return { storyCount: remoteStories().length, chapterCount: 0, skipped: true, dataUpdated: false, appUpdate };
       }
-      const archiveUrl = absoluteUrl(index.archiveUrl, cleanUrl);
+      const archiveUrl = absoluteUrl(packUrl, cleanUrl);
       const archiveResponse = await fetch(`${archiveUrl}${archiveUrl.includes('?') ? '&' : '?'}t=${Date.now()}`, { cache: 'no-store' });
       if (!archiveResponse.ok) throw new Error(`Pack update failed: ${archiveResponse.status}`);
       const archive = await archiveResponse.arrayBuffer();

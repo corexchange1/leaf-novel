@@ -642,8 +642,12 @@ function StoryDetailPage({ storyId }: { storyId: string }) {
                 darkMode ? 'text-[#F8FAFC] active:bg-white/5' : 'text-app-text active:bg-app-bg'
               }`}
             >
-              <span className="grid h-10 w-10 place-items-center rounded-2xl bg-app-primarySoft text-app-primaryDark">
-                <BookOpen size={18} />
+              <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl bg-app-primarySoft text-app-primaryDark">
+                {chapter.thumbnailUrl ? (
+                  <img src={chapter.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                ) : (
+                  <BookOpen size={18} />
+                )}
               </span>
               <span className="min-w-0 flex-1 text-[16px] font-medium leading-snug">
                 Chương {chapter.number} – {chapter.title}
@@ -924,8 +928,6 @@ function TriggeredImage({ triggerId, src, alt, effect = 'none' }: { triggerId: s
       addStoredFlag(triggeredImageKey, triggerId);
       window.clearTimeout(timeout);
       setTriggered(true);
-      if ('vibrate' in navigator) navigator.vibrate?.(normalizedEffect === 'shake' ? [28, 34, 28] : 20);
-      playImageCue(normalizedEffect);
       timeout = window.setTimeout(() => setTriggered(false), 1100);
     };
 
@@ -964,35 +966,6 @@ function TriggeredImage({ triggerId, src, alt, effect = 'none' }: { triggerId: s
       {alt && <figcaption>{alt}</figcaption>}
     </figure>
   );
-}
-
-function playImageCue(effect: string) {
-  try {
-    const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const context = new AudioContextClass();
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    const nowTime = context.currentTime;
-    const frequency = effect === 'flash' ? 820 : effect === 'blur' ? 180 : 360;
-
-    oscillator.type = effect === 'shake' ? 'sawtooth' : 'sine';
-    oscillator.frequency.setValueAtTime(frequency, nowTime);
-    oscillator.frequency.exponentialRampToValueAtTime(Math.max(80, frequency * 0.55), nowTime + 0.12);
-    gain.gain.setValueAtTime(0.0001, nowTime);
-    gain.gain.exponentialRampToValueAtTime(0.045, nowTime + 0.018);
-    gain.gain.exponentialRampToValueAtTime(0.0001, nowTime + 0.16);
-
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start(nowTime);
-    oscillator.stop(nowTime + 0.18);
-    oscillator.onended = () => {
-      context.close().catch(() => undefined);
-    };
-  } catch {
-    // Audio can be blocked until the first user gesture; the visual effect still runs.
-  }
 }
 
 function ReaderProgressFooter({
