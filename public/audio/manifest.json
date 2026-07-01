@@ -1,3 +1,21 @@
 {
-  "stories": []
+  "stories": [
+    {
+      "story": {
+        "id": "biet-thu-ven-bien",
+        "title": "Biệt thự ven biển",
+        "coverUrl": "/bundled-stories/biet-thu-ven-bien/cover.webp",
+        "totalChapters": 1
+      },
+      "chapters": [
+        {
+          "storyId": "biet-thu-ven-bien",
+          "chapterNumber": 1,
+          "title": "Chương 1: Đoạn đường vắng",
+          "filename": "001.mp3",
+          "audioUrl": "/audio/biet-thu-ven-bien/001.mp3"
+        }
+      ]
+    }
+  ]
 }
