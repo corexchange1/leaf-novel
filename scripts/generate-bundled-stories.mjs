@@ -10,6 +10,7 @@ const updatesDir = path.join(root, 'public', 'updates');
 const appVersionName = '1.9';
 const appVersionCode = 10;
 const releaseBaseUrl = `https://github.com/corexchange1/leaf-novel/releases/download/v${appVersionName}`;
+const rawPublicBaseUrl = 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public';
 
 async function exists(filePath) {
   try {
@@ -189,6 +190,25 @@ function packManifest(stories) {
   };
 }
 
+function absolutePublicUrl(value) {
+  if (!value || /^(https?:|data:|blob:)/i.test(value)) return value || '';
+  return `${rawPublicBaseUrl}/${value.replace(/^\/+/, '')}`;
+}
+
+function indexManifest(stories) {
+  return stories.map((item) => ({
+    story: {
+      ...item.story,
+      coverUrl: absolutePublicUrl(item.story.coverUrl),
+    },
+    chapters: item.chapters.map((chapter) => ({
+      ...chapter,
+      content: chapter.content.replaceAll('/bundled-stories/', `${rawPublicBaseUrl}/bundled-stories/`),
+      imageUrl: absolutePublicUrl(chapter.imageUrl),
+    })),
+  }));
+}
+
 async function writeUpdatePack(stories) {
   await fs.rm(updatesDir, { recursive: true, force: true });
   await fs.mkdir(updatesDir, { recursive: true });
@@ -203,7 +223,8 @@ async function writeUpdatePack(stories) {
     `${JSON.stringify(
       {
         dataVersion,
-        archiveUrl: 'stories-pack.zip',
+        stories: indexManifest(stories),
+        packUrl: 'stories-pack.zip',
         latestApp: {
           versionName: appVersionName,
           versionCode: appVersionCode,
