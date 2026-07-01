@@ -53,7 +53,10 @@ function parseMarkdownBlock(block: string): ChapterTextBlock {
 function htmlToBlocks(html: string): ChapterTextBlock[] {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const root = doc.querySelector('main') || doc.body;
-  const nodes = Array.from(root.querySelectorAll('p, img, figure'));
+  const nodes = Array.from(root.querySelectorAll('p, figure, img')).filter((node) => {
+    const element = node as HTMLElement;
+    return element.tagName.toLowerCase() !== 'img' || !element.closest('figure');
+  });
   return nodes
     .map((node) => {
       const element = node as HTMLElement;
