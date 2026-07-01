@@ -45,8 +45,8 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          tag: v1.29
-          name: Release v1.29
+          tag: v1.30
+          name: Release v1.30
           artifacts: artifacts/*.apk
           draft: true
           allowUpdates: true
