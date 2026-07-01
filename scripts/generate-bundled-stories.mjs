@@ -8,13 +8,16 @@ import JSZip from 'jszip';
 const execFileAsync = promisify(execFile);
 const root = process.cwd();
 const storiesDir = path.join(root, 'stories');
+const audioDir = path.join(root, 'audio');
 const outDir = path.join(root, 'public', 'bundled-stories');
+const audioOutDir = path.join(root, 'public', 'audio');
 const updatesDir = path.join(root, 'public', 'updates');
-const appVersionName = '1.23';
-const appVersionCode = 24;
+const appVersionName = '1.24';
+const appVersionCode = 25;
 const releaseBaseUrl = `https://github.com/corexchange1/leaf-novel/releases/download/v${appVersionName}`;
 const rawPublicBaseUrl = 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public';
 const imageExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+const audioExtensions = new Set(['.mp3', '.m4a', '.wav', '.ogg', '.aac']);
 const accounts = [
   { id: 'min', username: 'min', password: '123456', email: 'min@leafnovel.local', defaultName: 'Min', devices: ['any'] },
   { id: 'nh', username: 'nh', password: '123456', email: 'nh@leafnovel.local', defaultName: 'Nh', devices: ['any'] },
@@ -44,6 +47,10 @@ function htmlTitle(raw) {
 
 function isImageEntry(entry) {
   return entry.isFile() && imageExtensions.has(path.extname(entry.name).toLowerCase());
+}
+
+function isAudioEntry(entry) {
+  return entry.isFile() && audioExtensions.has(path.extname(entry.name).toLowerCase());
 }
 
 function fileStem(filename) {
@@ -311,6 +318,62 @@ async function readStory(storyId) {
   };
 }
 
+async function copyAudioForStory(storyId, chapters) {
+  const sources = [path.join(audioDir, storyId), path.join(storiesDir, storyId, 'audio')];
+  const tracks = [];
+  const seen = new Set();
+
+  for (const sourceDir of sources) {
+    if (!(await exists(sourceDir))) continue;
+    const entries = await fs.readdir(sourceDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!isAudioEntry(entry)) continue;
+      const number = Number.parseInt(entry.name, 10);
+      if (!Number.isFinite(number) || number <= 0) continue;
+      const key = `${storyId}:${number}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const targetDir = path.join(audioOutDir, storyId);
+      const target = path.join(targetDir, entry.name);
+      await fs.mkdir(targetDir, { recursive: true });
+      await fs.copyFile(path.join(sourceDir, entry.name), target);
+      const chapter = chapters.find((item) => item.number === number);
+      tracks.push({
+        storyId,
+        chapterNumber: number,
+        title: chapter?.title || `Chương ${String(number).padStart(3, '0')}`,
+        filename: entry.name,
+        audioUrl: `/audio/${storyId}/${entry.name}`,
+      });
+    }
+  }
+
+  return tracks.sort((a, b) => a.chapterNumber - b.chapterNumber);
+}
+
+async function writeAudioManifest(stories) {
+  await fs.rm(audioOutDir, { recursive: true, force: true });
+  await fs.mkdir(audioOutDir, { recursive: true });
+  const items = [];
+
+  for (const item of stories) {
+    const chapters = await copyAudioForStory(item.story.id, item.chapters);
+    if (!chapters.length) continue;
+    items.push({
+      story: {
+        id: item.story.id,
+        title: item.story.title,
+        coverUrl: item.story.coverUrl,
+        totalChapters: chapters.length,
+      },
+      chapters,
+    });
+  }
+
+  await fs.writeFile(path.join(audioOutDir, 'manifest.json'), `${JSON.stringify({ stories: items }, null, 2)}\n`);
+}
+
 async function addPublicAsset(zip, archivePath, publicUrl) {
   const publicPath = publicPathFromUrl(publicUrl);
   if (archivePath && publicPath && (await exists(publicPath))) {
@@ -417,6 +480,7 @@ async function main() {
 
   stories.sort((a, b) => new Date(b.story.updatedAt).getTime() - new Date(a.story.updatedAt).getTime());
   await fs.writeFile(path.join(outDir, 'manifest.json'), `${JSON.stringify({ stories }, null, 2)}\n`);
+  await writeAudioManifest(stories);
   await writeUpdatePack(stories);
   console.log(`Bundled ${stories.length} stories into ${path.relative(root, outDir)}`);
 }

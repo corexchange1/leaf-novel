@@ -1,5 +1,5 @@
 {
-  "dataVersion": "202607010840",
+  "dataVersion": "202607011113",
   "stories": [
     {
       "story": {
@@ -215,9 +215,9 @@
   ],
   "packUrl": "stories-pack.zip",
   "latestApp": {
-    "versionName": "1.23",
-    "versionCode": 24,
-    "phoneApkUrl": "https://github.com/corexchange1/leaf-novel/releases/download/v1.23/leaf-novel-v1.23-phone-debug.apk",
-    "tabletApkUrl": "https://github.com/corexchange1/leaf-novel/releases/download/v1.23/leaf-novel-v1.23-tablet-debug.apk"
+    "versionName": "1.24",
+    "versionCode": 25,
+    "phoneApkUrl": "https://github.com/corexchange1/leaf-novel/releases/download/v1.24/leaf-novel-v1.24-phone-debug.apk",
+    "tabletApkUrl": "https://github.com/corexchange1/leaf-novel/releases/download/v1.24/leaf-novel-v1.24-tablet-debug.apk"
   }
 }

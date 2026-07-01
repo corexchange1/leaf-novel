@@ -27,6 +27,14 @@ export type ChapterContent = Chapter & {
   content: string;
 };
 
+export type AudioChapter = {
+  storyId: string;
+  chapterNumber: number;
+  title: string;
+  filename: string;
+  audioUrl: string;
+};
+
 export type ReaderSettings = {
   fontSize: number;
   fontFamily: 'default' | 'serif' | 'sans';

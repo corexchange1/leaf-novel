@@ -26,7 +26,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react';
-import type { Chapter, ChapterContent, MockUser, ReaderSettings, Story } from './types';
+import type { AudioChapter, Chapter, ChapterContent, MockUser, ReaderSettings, Story } from './types';
 import { api } from './lib/api';
 import { appInfo } from './lib/appInfo';
 import { downloadApk, getDeviceProfile } from './lib/appUpdater';
@@ -1412,8 +1412,83 @@ function RecentRow({ story, chapterNumber, updatedAt }: { story: Story; chapterN
   );
 }
 
+type AudioStory = {
+  story: Pick<Story, 'id' | 'title' | 'coverUrl' | 'totalChapters'>;
+  chapters: AudioChapter[];
+};
+
+function audioManifestUrlFromUpdateUrl(updateUrl: string) {
+  try {
+    const url = new URL(updateUrl);
+    if (url.hostname === 'api.github.com' && url.pathname.includes('/contents/')) {
+      const parts = url.pathname.split('/').filter(Boolean);
+      const owner = parts[1];
+      const repo = parts[2];
+      const branch = url.searchParams.get('ref') || 'master';
+      return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/public/audio/manifest.json`;
+    }
+  } catch {
+    // Keep the bundled manifest as fallback if the update URL is custom or malformed.
+  }
+  return '/audio/manifest.json';
+}
+
+function normalizeAudioManifest(data: unknown, manifestUrl: string): AudioStory[] {
+  const stories = (data as { stories?: AudioStory[] })?.stories;
+  if (!Array.isArray(stories)) return [];
+  const publicBase = manifestUrl.startsWith('http') ? manifestUrl.replace(/\/audio\/manifest\.json(?:\?.*)?$/, '') : '';
+
+  return stories
+    .filter((item) => item?.story?.id && Array.isArray(item.chapters))
+    .map((item) => ({
+      story: item.story,
+      chapters: item.chapters.map((chapter) => ({
+        ...chapter,
+        audioUrl:
+          publicBase && chapter.audioUrl && !/^https?:\/\//i.test(chapter.audioUrl)
+            ? `${publicBase}/${chapter.audioUrl.replace(/^\/+/, '')}`
+            : chapter.audioUrl,
+      })),
+    }));
+}
+
 function AudioPage() {
   const { stories } = useStories();
+  const [audioStories, setAudioStories] = useState<AudioStory[]>([]);
+  const [selectedStoryId, setSelectedStoryId] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    const remoteManifestUrl = audioManifestUrlFromUpdateUrl(officialUpdateUrl);
+    const loadManifest = async () => {
+      for (const manifestUrl of [remoteManifestUrl, '/audio/manifest.json']) {
+        try {
+          const response = await fetch(`${manifestUrl}${manifestUrl.includes('?') ? '&' : '?'}t=${Date.now()}`, { cache: 'no-store' });
+          if (!response.ok) continue;
+          const list = normalizeAudioManifest(await response.json(), manifestUrl);
+          if (!list.length) continue;
+          if (!mounted) return;
+          setAudioStories(list);
+          setSelectedStoryId((current) => current || list[0]?.story?.id || '');
+          return;
+        } catch {
+          // Try the next source.
+        }
+      }
+      if (mounted) setAudioStories([]);
+    };
+    void loadManifest();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const visibleAudioStories = audioStories.length
+    ? audioStories
+    : stories.map((story) => ({ story: { id: story.id, title: story.title, coverUrl: story.coverUrl, totalChapters: 0 }, chapters: [] }));
+  const effectiveSelectedStoryId = selectedStoryId || visibleAudioStories[0]?.story.id || '';
+  const selectedAudioStory = visibleAudioStories.find((item) => item.story.id === effectiveSelectedStoryId);
+
   return (
     <section className="space-y-5 px-5 pb-8 pt-[calc(22px+env(safe-area-inset-top))] md:px-8">
       <div className="flex items-center justify-between gap-3">
@@ -1425,27 +1500,64 @@ function AudioPage() {
           <Headphones size={23} />
         </span>
       </div>
-      <div className="space-y-3">
-        {stories.map((story) => (
+
+      <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+        {visibleAudioStories.map(({ story, chapters }) => (
           <button
             type="button"
             key={story.id}
-            onClick={() => navigate(`/story/${story.id}`)}
-            className="flex min-h-[112px] w-full items-center gap-4 rounded-card bg-white p-3 text-left shadow-soft active:scale-[0.99]"
+            onClick={() => setSelectedStoryId(story.id)}
+            className={`w-[210px] shrink-0 rounded-card p-3 text-left shadow-soft active:scale-[0.99] ${
+              effectiveSelectedStoryId === story.id ? 'bg-app-primarySoft text-app-primaryDark' : 'bg-white'
+            }`}
           >
-            <Cover story={story} className="h-24 w-20 rounded-[20px]" />
-            <span className="min-w-0 flex-1">
-              <span className="mb-2 inline-flex items-center gap-1 rounded-full bg-app-primarySoft px-3 py-1 text-[12px] font-semibold text-app-primaryDark">
-                <Headphones size={14} />
-                Audiobook
+            <div className="flex items-center gap-3">
+              <Cover story={story as Story} className="h-16 w-12 rounded-2xl" />
+              <span className="min-w-0">
+                <span className="block truncate text-[16px] font-semibold">{story.title}</span>
+                <span className="mt-1 block text-[13px] font-semibold opacity-70">{chapters.length ? `${chapters.length} audio` : 'Chưa có audio'}</span>
               </span>
-              <span className="block truncate text-[18px] font-semibold">{story.title}</span>
-              <span className="mt-1 block text-[14px] font-medium text-app-muted">{story.totalChapters} chương khả dụng</span>
-            </span>
-            <ChevronRight size={20} className="text-app-muted" />
+            </div>
           </button>
         ))}
       </div>
+
+      <section className="rounded-card bg-white p-4 shadow-soft">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-[21px] font-semibold">{selectedAudioStory?.story.title || 'Chưa có audio'}</h2>
+            <p className="mt-1 text-[14px] font-medium text-app-muted">Đặt file theo format: audio/story-id/001.mp3</p>
+          </div>
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-app-primarySoft text-app-primaryDark">
+            <Headphones size={20} />
+          </span>
+        </div>
+
+        {selectedAudioStory?.chapters.length ? (
+          <div className="space-y-3">
+            {selectedAudioStory.chapters.map((chapter) => (
+              <article key={`${chapter.storyId}-${chapter.chapterNumber}`} className="rounded-[20px] border border-app-border bg-app-bg p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-app-muted">Audio {String(chapter.chapterNumber).padStart(3, '0')}</p>
+                    <h3 className="truncate text-[16px] font-semibold">{chapter.title}</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/read/${chapter.storyId}/${chapter.chapterNumber}`)}
+                    className="rounded-full bg-white px-3 py-2 text-[12px] font-semibold text-app-muted shadow-soft"
+                  >
+                    Text
+                  </button>
+                </div>
+                <audio controls preload="none" src={chapter.audioUrl} className="h-10 w-full" />
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyCard text="Chưa tìm thấy file audio cho truyện này." />
+        )}
+      </section>
     </section>
   );
 }
