@@ -7,8 +7,8 @@ const root = process.cwd();
 const storiesDir = path.join(root, 'stories');
 const outDir = path.join(root, 'public', 'bundled-stories');
 const updatesDir = path.join(root, 'public', 'updates');
-const appVersionName = '1.9';
-const appVersionCode = 10;
+const appVersionName = '1.10';
+const appVersionCode = 11;
 const releaseBaseUrl = `https://github.com/corexchange1/leaf-novel/releases/download/v${appVersionName}`;
 const rawPublicBaseUrl = 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public';
 

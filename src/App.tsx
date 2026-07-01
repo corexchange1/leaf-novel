@@ -29,6 +29,7 @@ import {
 import type { Chapter, ChapterContent, MockUser, ReaderSettings, Story } from './types';
 import { api } from './lib/api';
 import { appInfo } from './lib/appInfo';
+import { downloadApk } from './lib/appUpdater';
 import { officialUpdateUrl } from './lib/storage';
 import { useLibraryStore } from './store/useLibraryStore';
 import { chapterLabel, clamp, formatDateTime, formatMinutes } from './utils/format';
@@ -1143,6 +1144,16 @@ function MePage() {
       setUpdateNotice(error instanceof Error ? `Không cập nhật được: ${error.message}` : 'Không cập nhật được.');
     }
   };
+  const downloadUpdateApk = async () => {
+    if (!updateApkUrl) return;
+    setUpdateNotice('Đang gửi APK vào mục Tải xuống...');
+    try {
+      const result = await downloadApk(updateApkUrl);
+      setUpdateNotice(`Đã bắt đầu tải ${result.filename}. Mở thông báo tải xuống hoặc thư mục Downloads để cài.`);
+    } catch (error) {
+      setUpdateNotice(error instanceof Error ? `Không tải được APK: ${error.message}` : 'Không tải được APK.');
+    }
+  };
 
   return (
     <section className="space-y-5 px-5 pb-8 pt-[calc(22px+env(safe-area-inset-top))] md:px-8">
@@ -1230,7 +1241,7 @@ function MePage() {
           {updateApkUrl && (
             <button
               type="button"
-              onClick={() => window.open(updateApkUrl, '_blank')}
+              onClick={downloadUpdateApk}
               className="flex min-h-[48px] w-full items-center justify-center rounded-button border border-app-border bg-white text-center text-[15px] font-semibold shadow-soft"
             >
               Tải bản app mới
