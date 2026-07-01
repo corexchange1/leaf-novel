@@ -1191,7 +1191,6 @@ function MePage() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [updateNotice, setUpdateNotice] = useState('');
   const [updateApkUrl, setUpdateApkUrl] = useState('');
-  const [deviceInfo, setDeviceInfo] = useState(() => storage.getDeviceInfo());
   const recent = Object.values(progress).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
   useEffect(() => {
@@ -1206,7 +1205,6 @@ function MePage() {
         checkedAt: now(),
       };
       storage.setDeviceInfo(info);
-      setDeviceInfo(info);
     });
   }, [user?.id, user?.username]);
 
@@ -1217,10 +1215,7 @@ function MePage() {
     setUpdateApkUrl('');
     try {
       const result = await api.syncRemote(officialUpdateUrl);
-      const notes = [];
-      if (result.dataUpdated) notes.push(`Đã cập nhật ${result.storyCount} truyện`);
       if (result.appUpdate) {
-        notes.push(`Có app mới ${result.appUpdate.versionName}`);
         const profile = await getDeviceProfile();
         const info = {
           userId: user.id,
@@ -1232,25 +1227,22 @@ function MePage() {
           checkedAt: now(),
         };
         storage.setDeviceInfo(info);
-        setDeviceInfo(info);
         const account = storage.getAccount(user.id);
         const allowedDevices = account?.devices?.length ? account.devices : ['any'];
-        if (!allowedDevices.includes('any') && !allowedDevices.includes(profile.physicalDevice)) {
+        if (!allowedDevices.includes('any') && !allowedDevices.includes(profile.installedFlavor)) {
           setUpdateApkUrl('');
-          setUpdateNotice(`Tài khoản ${user.id} chưa được phép cập nhật trên thiết bị ${profile.physicalDevice}.`);
+          setUpdateNotice('Không có bản cập nhật phù hợp.');
           return;
         }
         const selectedUrl =
-          profile.physicalDevice === 'tablet'
+          profile.installedFlavor === 'tablet'
             ? result.appUpdate.tabletApkUrl || result.appUpdate.phoneApkUrl || ''
             : result.appUpdate.phoneApkUrl || result.appUpdate.tabletApkUrl || '';
         setUpdateApkUrl(selectedUrl);
-        notes.push(`Thiết bị ${profile.physicalDevice}`);
-        if (profile.installedFlavor !== profile.physicalDevice) {
-          notes.push(`Bản đang cài là ${profile.installedFlavor}, sẽ tải bản ${profile.physicalDevice}`);
-        }
+        setUpdateNotice('Có bản mới.');
+        return;
       }
-      setUpdateNotice(notes.length ? notes.join(' • ') : 'Đang là bản mới nhất.');
+      setUpdateNotice(result.dataUpdated ? 'Đã cập nhật truyện.' : 'Đang là bản mới nhất.');
     } catch (error) {
       setUpdateNotice(error instanceof Error ? `Không cập nhật được: ${error.message}` : 'Không cập nhật được.');
     }
@@ -1359,7 +1351,6 @@ function MePage() {
             </button>
           )}
           <SettingsRow label="Phiên bản app" value={`v${appInfo.versionName}`} />
-          {deviceInfo && <SettingsRow label="Thiết bị" value={`${deviceInfo.physicalDevice} / bản ${deviceInfo.installedFlavor}`} />}
         </SettingsGroup>
       </section>
 

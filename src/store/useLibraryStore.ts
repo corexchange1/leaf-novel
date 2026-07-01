@@ -47,7 +47,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   login: (username, password) => {
     const user = storage.login(username, password);
     if (!user) return false;
-    set({ user, stats: storage.getStats() });
+    set({ user, settings: storage.getSettings(), progress: storage.getProgressMap(), stats: storage.getStats() });
     return true;
   },
   updateUser: (user) =>

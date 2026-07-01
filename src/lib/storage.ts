@@ -80,6 +80,16 @@ function statsKey() {
   return accountId ? `${keys.stats}:${accountId}` : keys.stats;
 }
 
+function settingsKey() {
+  const accountId = sessionId();
+  return accountId ? `${keys.settings}:${accountId}` : keys.settings;
+}
+
+function progressKey() {
+  const accountId = sessionId();
+  return accountId ? `${keys.progress}:${accountId}` : keys.progress;
+}
+
 function normalizeStats(stats: ReadingStats): ReadingStats {
   return {
     ...defaultStats,
@@ -103,6 +113,35 @@ function getStatsForCurrentUser() {
 
   const cameFromFakeSeed = !legacyStats.lastReadDate && Number(legacyStats.totalMinutesRead || 0) >= 7000;
   return cameFromFakeSeed ? defaultStats : normalizeStats(legacyStats);
+}
+
+function getSettingsForCurrentUser() {
+  const accountKey = settingsKey();
+  const accountSettings = readStorage<ReaderSettings | null>(accountKey, null);
+  if (accountSettings) return { ...defaultReaderSettings, ...accountSettings, updateUrl: officialUpdateUrl };
+
+  const legacySettings = readStorage<ReaderSettings | null>(keys.settings, null);
+  if (legacySettings && accountKey !== keys.settings) {
+    const migrated = { ...defaultReaderSettings, ...legacySettings, updateUrl: officialUpdateUrl };
+    writeStorage(accountKey, migrated);
+    return migrated;
+  }
+
+  return { ...defaultReaderSettings, updateUrl: officialUpdateUrl };
+}
+
+function getProgressForCurrentUser() {
+  const accountKey = progressKey();
+  const accountProgress = readStorage<Record<string, ReadingProgress> | null>(accountKey, null);
+  if (accountProgress) return accountProgress;
+
+  const legacyProgress = readStorage<Record<string, ReadingProgress> | null>(keys.progress, null);
+  if (legacyProgress && accountKey !== keys.progress) {
+    writeStorage(accountKey, legacyProgress);
+    return legacyProgress;
+  }
+
+  return {};
 }
 
 function defaultUser(accountId: string): MockUser | null {
@@ -176,10 +215,10 @@ export const storage = {
   },
   getDeviceInfo: () => readStorage<DeviceUpdateInfo | null>(keys.deviceInfo, null),
   setDeviceInfo: (info: DeviceUpdateInfo) => writeStorage(keys.deviceInfo, info),
-  getSettings: () => ({ ...readStorage(keys.settings, defaultReaderSettings), updateUrl: officialUpdateUrl }),
-  setSettings: (settings: ReaderSettings) => writeStorage(keys.settings, settings),
+  getSettings: () => getSettingsForCurrentUser(),
+  setSettings: (settings: ReaderSettings) => writeStorage(settingsKey(), { ...settings, updateUrl: officialUpdateUrl }),
   getStats: () => getStatsForCurrentUser(),
   setStats: (stats: ReadingStats) => writeStorage(statsKey(), stats),
-  getProgressMap: () => readStorage<Record<string, ReadingProgress>>(keys.progress, {}),
-  setProgressMap: (map: Record<string, ReadingProgress>) => writeStorage(keys.progress, map),
+  getProgressMap: () => getProgressForCurrentUser(),
+  setProgressMap: (map: Record<string, ReadingProgress>) => writeStorage(progressKey(), map),
 };
