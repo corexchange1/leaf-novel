@@ -19,8 +19,13 @@ const speakerColors: Record<string, string> = {
   'Lâm': '#5FAE5F',
   'Hồng': '#D94B8A',
   'Vy': '#008C8C',
-  'Minh': '#777777',
-  'Thanh': '#1F6B3A',
+  'Minh': '#D8DEE9',
+  'Thanh': '#38BDF8',
+};
+
+const forcedSpeakerColors: Record<string, string> = {
+  'Minh': speakerColors['Minh'],
+  'Thanh': speakerColors['Thanh'],
 };
 
 export function chapterToBlocks(content: string, format: 'markdown' | 'html' = 'markdown'): ChapterTextBlock[] {
@@ -102,7 +107,7 @@ function parseSpeakerBlock(block: string, explicitColor?: string): ChapterTextBl
     type: 'dialogue',
     speaker,
     text: match[2].trim(),
-    color: explicitColor || speakerColors[speaker],
+    color: forcedSpeakerColors[speaker] || explicitColor || speakerColors[speaker],
   };
 }
 

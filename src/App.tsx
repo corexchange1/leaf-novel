@@ -871,14 +871,7 @@ function ReaderPage({ storyId, chapterNumber }: { storyId: string; chapterNumber
                 className={`leading-[inherit] ${dialogueClass}`}
                 style={block.color && settings.dialogueColors ? ({ '--speaker-color': block.color } as CSSProperties) : undefined}
               >
-                {block.type === 'dialogue' && block.speaker ? (
-                  <>
-                    <span className="reader-speaker">{block.speaker}:</span>{' '}
-                    <span className="reader-speech">{block.text}</span>
-                  </>
-                ) : (
-                  block.text
-                )}
+                {block.text}
               </p>
             );
           })}
