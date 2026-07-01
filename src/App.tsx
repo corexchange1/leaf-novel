@@ -1326,12 +1326,12 @@ function MePage() {
   };
   const downloadUpdateApk = async () => {
     if (!updateApkUrl) return;
-    setUpdateNotice('Đang tải APK. Tải xong Android sẽ hỏi xác nhận cập nhật...');
+    setUpdateNotice('Đang tải...');
     try {
-      const result = await downloadApk(updateApkUrl);
-      setUpdateNotice(`Đang tải ${result.filename}. Khi tải xong, chọn Cập nhật để cài.`);
+      await downloadApk(updateApkUrl);
+      setUpdateNotice('Tải xong. Android sẽ hỏi xác nhận cài đặt.');
     } catch (error) {
-      setUpdateNotice(error instanceof Error ? `Không tải được APK: ${error.message}` : 'Không tải được APK.');
+      setUpdateNotice('Không tải được. Vui lòng thử lại.');
     }
   };
 
