@@ -53,6 +53,32 @@ export type MockUser = {
   name: string;
   email: string;
   avatar?: string;
+  devices?: Array<'phone' | 'tablet' | 'any'>;
+};
+
+export type AccountRecord = {
+  id: string;
+  username: string;
+  password: string;
+  email: string;
+  defaultName: string;
+  devices?: Array<'phone' | 'tablet' | 'any'>;
+};
+
+export type SavedLogin = {
+  username: string;
+  password: string;
+  remember: boolean;
+};
+
+export type DeviceUpdateInfo = {
+  userId: string;
+  username: string;
+  physicalDevice: 'phone' | 'tablet';
+  installedFlavor: 'phone' | 'tablet';
+  packageName: string;
+  versionName: string;
+  checkedAt: string;
 };
 
 export type ReadingStats = {

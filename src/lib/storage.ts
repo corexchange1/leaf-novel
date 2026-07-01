@@ -1,4 +1,4 @@
-import type { MockUser, ReaderSettings, ReadingProgress, ReadingStats } from '../types';
+import type { AccountRecord, DeviceUpdateInfo, MockUser, ReaderSettings, ReadingProgress, ReadingStats, SavedLogin } from '../types';
 
 const keys = {
   user: 'leafnovel:user',
@@ -6,15 +6,21 @@ const keys = {
   progress: 'leafnovel:progress',
   settings: 'leafnovel:settings',
   stats: 'leafnovel:stats',
+  accounts: 'leafnovel:accounts',
+  savedLogin: 'leafnovel:saved-login',
+  deviceInfo: 'leafnovel:device-info',
 };
 
 export const officialUpdateUrl =
   import.meta.env.VITE_STORY_UPDATE_URL || 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public/updates/stories-index.json';
 
-export const officialAccounts = [
-  { id: 'min', username: 'min', password: '123456', email: 'min@leafnovel.local', defaultName: 'Min' },
-  { id: 'nh', username: 'nh', password: '123456', email: 'nh@leafnovel.local', defaultName: 'Nh' },
-] as const;
+export const officialAccountsUrl =
+  import.meta.env.VITE_ACCOUNTS_URL || 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public/updates/accounts.json';
+
+const bundledAccounts: AccountRecord[] = [
+  { id: 'min', username: 'min', password: '123456', email: 'min@leafnovel.local', defaultName: 'Min', devices: ['any'] },
+  { id: 'nh', username: 'nh', password: '123456', email: 'nh@leafnovel.local', defaultName: 'Nh', devices: ['any'] },
+];
 
 export const defaultReaderSettings: ReaderSettings = {
   fontSize: 22,
@@ -100,22 +106,52 @@ function getStatsForCurrentUser() {
 }
 
 function defaultUser(accountId: string): MockUser | null {
-  const account = officialAccounts.find((item) => item.id === accountId);
+  const account = accountRecords().find((item) => item.id === accountId);
   if (!account) return null;
   return {
     id: account.id,
     username: account.username,
     name: account.defaultName,
     email: account.email,
+    devices: account.devices,
   };
+}
+
+function accountRecords() {
+  const accounts = readStorage<AccountRecord[]>(keys.accounts, []);
+  return accounts.length ? accounts : bundledAccounts;
+}
+
+function accountToUser(account: AccountRecord): MockUser {
+  return {
+    id: account.id,
+    username: account.username,
+    name: account.defaultName,
+    email: account.email,
+    devices: account.devices,
+  };
+}
+
+export async function syncAccounts(url = officialAccountsUrl) {
+  try {
+    const response = await fetch(`${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Accounts failed: ${response.status}`);
+    const data = await response.json();
+    const accounts = Array.isArray(data.accounts) ? (data.accounts as AccountRecord[]) : [];
+    if (!accounts.length) throw new Error('Accounts empty');
+    writeStorage(keys.accounts, accounts);
+    return accounts;
+  } catch {
+    return accountRecords();
+  }
 }
 
 export const storage = {
   login: (username: string, password: string) => {
-    const account = officialAccounts.find((item) => item.username === username.trim() && item.password === password);
+    const account = accountRecords().find((item) => item.id === username.trim() && item.password === password);
     if (!account) return null;
     const users = readStorage<Record<string, MockUser>>(keys.user, {});
-    const user = users[account.id] ?? defaultUser(account.id);
+    const user = users[account.id] ?? accountToUser(account);
     if (!user) return null;
     writeStorage(keys.session, account.id);
     writeStorage(keys.user, { ...users, [account.id]: user });
@@ -132,6 +168,14 @@ export const storage = {
     const users = readStorage<Record<string, MockUser>>(keys.user, {});
     writeStorage(keys.user, { ...users, [user.id]: user });
   },
+  getAccount: (accountId: string) => accountRecords().find((item) => item.id === accountId) ?? null,
+  getSavedLogin: () => readStorage<SavedLogin>(keys.savedLogin, { username: '', password: '', remember: false }),
+  setSavedLogin: (login: SavedLogin) => {
+    if (login.remember) writeStorage(keys.savedLogin, login);
+    else localStorage.removeItem(keys.savedLogin);
+  },
+  getDeviceInfo: () => readStorage<DeviceUpdateInfo | null>(keys.deviceInfo, null),
+  setDeviceInfo: (info: DeviceUpdateInfo) => writeStorage(keys.deviceInfo, info),
   getSettings: () => ({ ...readStorage(keys.settings, defaultReaderSettings), updateUrl: officialUpdateUrl }),
   setSettings: (settings: ReaderSettings) => writeStorage(keys.settings, settings),
   getStats: () => getStatsForCurrentUser(),

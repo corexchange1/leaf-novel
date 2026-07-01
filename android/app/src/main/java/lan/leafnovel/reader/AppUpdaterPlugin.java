@@ -8,6 +8,7 @@ import android.content.IntentFilter;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.content.res.Configuration;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -21,7 +22,15 @@ public class AppUpdaterPlugin extends Plugin {
     public void info(PluginCall call) {
         JSObject payload = new JSObject();
         payload.put("deviceFlavor", BuildConfig.DEVICE_FLAVOR);
+        payload.put("physicalDevice", getPhysicalDevice());
+        payload.put("packageName", getContext().getPackageName());
+        payload.put("versionName", BuildConfig.VERSION_NAME);
         call.resolve(payload);
+    }
+
+    private String getPhysicalDevice() {
+        Configuration configuration = getContext().getResources().getConfiguration();
+        return configuration.smallestScreenWidthDp >= 600 ? "tablet" : "phone";
     }
 
     @PluginMethod

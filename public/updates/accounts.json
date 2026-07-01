@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2026-07-01T08:31:06.864Z",
+  "accounts": [
+    {
+      "id": "min",
+      "username": "min",
+      "password": "123456",
+      "email": "min@leafnovel.local",
+      "defaultName": "Min",
+      "devices": [
+        "any"
+      ]
+    },
+    {
+      "id": "nh",
+      "username": "nh",
+      "password": "123456",
+      "email": "nh@leafnovel.local",
+      "defaultName": "Nh",
+      "devices": [
+        "any"
+      ]
+    }
+  ]
+}

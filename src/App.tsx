@@ -29,8 +29,8 @@ import {
 import type { Chapter, ChapterContent, MockUser, ReaderSettings, Story } from './types';
 import { api } from './lib/api';
 import { appInfo } from './lib/appInfo';
-import { downloadApk, getDeviceFlavor } from './lib/appUpdater';
-import { officialUpdateUrl } from './lib/storage';
+import { downloadApk, getDeviceProfile } from './lib/appUpdater';
+import { officialUpdateUrl, storage, syncAccounts } from './lib/storage';
 import { useLibraryStore } from './store/useLibraryStore';
 import { chapterLabel, clamp, formatDateTime, formatMinutes } from './utils/format';
 import { chapterToBlocks } from './utils/markdown';
@@ -225,16 +225,25 @@ function IconButton({
 
 function LoginPage() {
   const login = useLibraryStore((state) => state.login);
-  const [username, setUsername] = useState('min');
-  const [password, setPassword] = useState('123456');
+  const savedLogin = storage.getSavedLogin();
+  const [username, setUsername] = useState(savedLogin.remember ? savedLogin.username : '');
+  const [password, setPassword] = useState(savedLogin.remember ? savedLogin.password : '');
+  const [remember, setRemember] = useState(savedLogin.remember);
   const [error, setError] = useState('');
 
-  const submit = () => {
+  useEffect(() => {
+    syncAccounts().catch(() => undefined);
+  }, []);
+
+  const submit = async () => {
+    setError('');
+    await syncAccounts();
     if (login(username, password)) {
+      storage.setSavedLogin({ username: username.trim(), password, remember });
       navigate('/');
       return;
     }
-    setError('Sai tài khoản hoặc mật khẩu.');
+    setError('Sai ID hoặc mật khẩu.');
   };
 
   return (
@@ -244,12 +253,13 @@ function LoginPage() {
         <h1 className="mt-4 text-center text-[30px] font-semibold leading-tight">Leaf Novel</h1>
         <div className="mt-6 space-y-3">
           <label className="block">
-            <span className="mb-2 block text-[14px] font-semibold text-app-muted">Tài khoản</span>
+            <span className="mb-2 block text-[14px] font-semibold text-app-muted">ID tài khoản</span>
             <input
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               className="min-h-12 w-full rounded-button border border-app-border px-4 text-[16px] font-semibold outline-none focus:border-app-primary"
               autoComplete="username"
+              placeholder="Nhập ID"
             />
           </label>
           <label className="block">
@@ -260,7 +270,12 @@ function LoginPage() {
               onChange={(event) => setPassword(event.target.value)}
               className="min-h-12 w-full rounded-button border border-app-border px-4 text-[16px] font-semibold outline-none focus:border-app-primary"
               autoComplete="current-password"
+              placeholder="Nhập mật khẩu"
             />
+          </label>
+          <label className="flex min-h-11 items-center justify-between rounded-2xl bg-app-bg px-4 text-[15px] font-semibold">
+            <span>Lưu thông tin đăng nhập</span>
+            <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="h-5 w-5 accent-app-primary" />
           </label>
           {error && <p className="text-center text-[14px] font-semibold text-app-danger">{error}</p>}
           <button
@@ -1176,7 +1191,24 @@ function MePage() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [updateNotice, setUpdateNotice] = useState('');
   const [updateApkUrl, setUpdateApkUrl] = useState('');
+  const [deviceInfo, setDeviceInfo] = useState(() => storage.getDeviceInfo());
   const recent = Object.values(progress).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+  useEffect(() => {
+    getDeviceProfile().then((profile) => {
+      const info = {
+        userId: user?.id || '',
+        username: user?.username || '',
+        physicalDevice: profile.physicalDevice,
+        installedFlavor: profile.installedFlavor,
+        packageName: profile.packageName,
+        versionName: profile.versionName,
+        checkedAt: now(),
+      };
+      storage.setDeviceInfo(info);
+      setDeviceInfo(info);
+    });
+  }, [user?.id, user?.username]);
 
   if (!user) return null;
 
@@ -1189,8 +1221,34 @@ function MePage() {
       if (result.dataUpdated) notes.push(`Đã cập nhật ${result.storyCount} truyện`);
       if (result.appUpdate) {
         notes.push(`Có app mới ${result.appUpdate.versionName}`);
-        const flavor = await getDeviceFlavor();
-        setUpdateApkUrl(flavor === 'tablet' ? result.appUpdate.tabletApkUrl || result.appUpdate.phoneApkUrl || '' : result.appUpdate.phoneApkUrl || result.appUpdate.tabletApkUrl || '');
+        const profile = await getDeviceProfile();
+        const info = {
+          userId: user.id,
+          username: user.username,
+          physicalDevice: profile.physicalDevice,
+          installedFlavor: profile.installedFlavor,
+          packageName: profile.packageName,
+          versionName: profile.versionName,
+          checkedAt: now(),
+        };
+        storage.setDeviceInfo(info);
+        setDeviceInfo(info);
+        const account = storage.getAccount(user.id);
+        const allowedDevices = account?.devices?.length ? account.devices : ['any'];
+        if (!allowedDevices.includes('any') && !allowedDevices.includes(profile.physicalDevice)) {
+          setUpdateApkUrl('');
+          setUpdateNotice(`Tài khoản ${user.id} chưa được phép cập nhật trên thiết bị ${profile.physicalDevice}.`);
+          return;
+        }
+        const selectedUrl =
+          profile.physicalDevice === 'tablet'
+            ? result.appUpdate.tabletApkUrl || result.appUpdate.phoneApkUrl || ''
+            : result.appUpdate.phoneApkUrl || result.appUpdate.tabletApkUrl || '';
+        setUpdateApkUrl(selectedUrl);
+        notes.push(`Thiết bị ${profile.physicalDevice}`);
+        if (profile.installedFlavor !== profile.physicalDevice) {
+          notes.push(`Bản đang cài là ${profile.installedFlavor}, sẽ tải bản ${profile.physicalDevice}`);
+        }
       }
       setUpdateNotice(notes.length ? notes.join(' • ') : 'Đang là bản mới nhất.');
     } catch (error) {
@@ -1301,6 +1359,7 @@ function MePage() {
             </button>
           )}
           <SettingsRow label="Phiên bản app" value={`v${appInfo.versionName}`} />
+          {deviceInfo && <SettingsRow label="Thiết bị" value={`${deviceInfo.physicalDevice} / bản ${deviceInfo.installedFlavor}`} />}
         </SettingsGroup>
       </section>
 

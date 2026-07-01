@@ -10,11 +10,15 @@ const root = process.cwd();
 const storiesDir = path.join(root, 'stories');
 const outDir = path.join(root, 'public', 'bundled-stories');
 const updatesDir = path.join(root, 'public', 'updates');
-const appVersionName = '1.19';
-const appVersionCode = 20;
+const appVersionName = '1.20';
+const appVersionCode = 21;
 const releaseBaseUrl = `https://github.com/corexchange1/leaf-novel/releases/download/v${appVersionName}`;
 const rawPublicBaseUrl = 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public';
 const imageExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+const accounts = [
+  { id: 'min', username: 'min', password: '123456', email: 'min@leafnovel.local', defaultName: 'Min', devices: ['any'] },
+  { id: 'nh', username: 'nh', password: '123456', email: 'nh@leafnovel.local', defaultName: 'Nh', devices: ['any'] },
+];
 
 async function exists(filePath) {
   try {
@@ -373,6 +377,7 @@ async function writeUpdatePack(stories) {
   await fs.rm(updatesDir, { recursive: true, force: true });
   await fs.mkdir(updatesDir, { recursive: true });
   const dataVersion = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 12);
+  await fs.writeFile(path.join(updatesDir, 'accounts.json'), `${JSON.stringify({ generatedAt: new Date().toISOString(), accounts }, null, 2)}\n`);
   const zip = new JSZip();
   await addPackAssets(zip, stories);
   zip.file('manifest.json', `${JSON.stringify(packManifest(stories), null, 2)}\n`);
