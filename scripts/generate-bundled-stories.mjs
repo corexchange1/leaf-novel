@@ -10,8 +10,8 @@ const root = process.cwd();
 const storiesDir = path.join(root, 'stories');
 const outDir = path.join(root, 'public', 'bundled-stories');
 const updatesDir = path.join(root, 'public', 'updates');
-const appVersionName = '1.13';
-const appVersionCode = 14;
+const appVersionName = '1.14';
+const appVersionCode = 15;
 const releaseBaseUrl = `https://github.com/corexchange1/leaf-novel/releases/download/v${appVersionName}`;
 const rawPublicBaseUrl = 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public';
 const imageExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp']);
@@ -71,6 +71,11 @@ function chapterImageAssets(entries, chapterNumber) {
 
   numbered.sort((a, b) => a.order - b.order);
   return { cover, numbered: numbered.length ? numbered : legacy };
+}
+
+function imageTitle(meta, sourceName, fallback = '') {
+  const stem = fileStem(sourceName);
+  return meta.imageTitles?.[stem] || meta.imageTitles?.[`pic${stem}`] || fallback;
 }
 
 function webpName(sourceName, suffix = '') {
@@ -255,7 +260,7 @@ async function readStory(storyId) {
       numberedAssets.push({
         ...asset,
         order: item.order,
-        alt: `Anh chuong ${String(number).padStart(3, '0')}-${String(item.order).padStart(2, '0')}`,
+        alt: imageTitle(meta, item.entry.name),
       });
     }
     chapter.numberedImageFiles = numberedAssets;
@@ -263,6 +268,7 @@ async function readStory(storyId) {
     if (numberedAssets[0]) {
       chapter.imageUrl = numberedAssets[0].publicUrl;
       chapter.imageFile = numberedAssets[0].file;
+      chapter.imageCaption = numberedAssets[0].alt;
     }
 
     const thumbnailSource = assets.cover || assets.numbered[0]?.entry;

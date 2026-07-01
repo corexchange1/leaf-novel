@@ -633,28 +633,31 @@ function StoryDetailPage({ storyId }: { storyId: string }) {
           )}
         </div>
         <div className="divide-y divide-app-border">
-          {visibleChapters.map((chapter) => (
-            <button
-              type="button"
-              key={chapter.filename}
-              onClick={() => navigate(`/read/${story.id}/${chapter.number}`)}
-              className={`flex min-h-[64px] w-full items-center gap-3 rounded-2xl px-2 py-3 text-left active:scale-[0.99] ${
-                darkMode ? 'text-[#F8FAFC] active:bg-white/5' : 'text-app-text active:bg-app-bg'
-              }`}
-            >
-              <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl bg-app-primarySoft text-app-primaryDark">
-                {chapter.thumbnailUrl ? (
-                  <img src={chapter.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
-                ) : (
-                  <BookOpen size={18} />
-                )}
-              </span>
-              <span className="min-w-0 flex-1 text-[16px] font-medium leading-snug">
-                Chương {chapter.number} – {chapter.title}
-              </span>
-              <ChevronRight size={19} className="text-app-muted" />
-            </button>
-          ))}
+          {visibleChapters.map((chapter) => {
+            const titleHasChapterNumber = new RegExp(`^\\s*Chương\\s+0*${chapter.number}(\\D|$)`, 'i').test(chapter.title);
+            const chapterLabel = titleHasChapterNumber ? chapter.title : `Chương ${chapter.number} – ${chapter.title}`;
+
+            return (
+              <button
+                type="button"
+                key={chapter.filename}
+                onClick={() => navigate(`/read/${story.id}/${chapter.number}`)}
+                className={`flex min-h-[64px] w-full items-center gap-3 rounded-2xl px-2 py-3 text-left active:scale-[0.99] ${
+                  darkMode ? 'text-[#F8FAFC] active:bg-white/5' : 'text-app-text active:bg-app-bg'
+                }`}
+              >
+                <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl bg-app-primarySoft text-app-primaryDark">
+                  {chapter.thumbnailUrl ? (
+                    <img src={chapter.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  ) : (
+                    <BookOpen size={18} />
+                  )}
+                </span>
+                <span className="min-w-0 flex-1 text-[16px] font-medium leading-snug">{chapterLabel}</span>
+                <ChevronRight size={19} className="text-app-muted" />
+              </button>
+            );
+          })}
         </div>
       </section>
     </section>
@@ -839,12 +842,12 @@ function ReaderPage({ storyId, chapterNumber }: { storyId: string; chapterNumber
         style={{ fontSize: settings.fontSize, lineHeight: settings.lineHeight }}
       >
         {chapter.imageUrl && (
-          <img
-            src={chapter.imageUrl}
-            alt={chapter.title}
-            className="relative left-1/2 mb-7 h-[270px] w-screen max-w-none -translate-x-1/2 object-cover md:h-[430px]"
-            loading="eager"
-          />
+          <figure className="relative left-1/2 mb-7 w-screen max-w-none -translate-x-1/2">
+            <img src={chapter.imageUrl} alt={chapter.imageCaption || chapter.title} className="h-[270px] w-full object-cover md:h-[430px]" loading="eager" />
+            {chapter.imageCaption && (
+              <figcaption className="mt-2 px-6 text-center text-[0.78em] font-medium opacity-60 md:px-12">{chapter.imageCaption}</figcaption>
+            )}
+          </figure>
         )}
         <h1 className="mb-7 text-[1.36em] font-semibold leading-tight">{chapter.title}</h1>
         <div className="space-y-6">

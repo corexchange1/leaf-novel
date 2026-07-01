@@ -5,6 +5,12 @@
   "totalChapters": 2,
   "genres": ["Ngôn tình", "Đô thị", "Chữa lành"],
   "summary": "Một chuyến đi chơi chung đã gắn kết nhóm bạn và khiến vài trái tim yêu nồng say",
-  "description": "Hồng và Lâm cuối cùng có đến được với nhau",
-  "updatedAt": "2026-06-30T23:45:00.000Z"
+  "description": "Hồng sẽ chọn ai",
+  "updatedAt": "2026-06-30T23:45:00.000Z",
+  "imageTitles": {
+    "001-01": "Đoạn đường vắng",
+    "001-02": "Hồng ngắm biển",
+    "002-01": "Căn biệt thự màu trắng",
+    "002-02": "Những căn phòng khoá"
+  }
 }
