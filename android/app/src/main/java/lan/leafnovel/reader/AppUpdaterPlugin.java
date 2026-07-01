@@ -14,6 +14,13 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "AppUpdater")
 public class AppUpdaterPlugin extends Plugin {
     @PluginMethod
+    public void info(PluginCall call) {
+        JSObject payload = new JSObject();
+        payload.put("deviceFlavor", BuildConfig.DEVICE_FLAVOR);
+        call.resolve(payload);
+    }
+
+    @PluginMethod
     public void download(PluginCall call) {
         String url = call.getString("url", "");
         String filename = call.getString("filename", "");

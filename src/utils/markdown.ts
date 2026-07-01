@@ -19,7 +19,7 @@ const speakerColors: Record<string, string> = {
   'Lâm': '#5FAE5F',
   'Hồng': '#D94B8A',
   'Vy': '#008C8C',
-  'Minh': '#D8DEE9',
+  'Minh': '#C4B5FD',
   'Thanh': '#38BDF8',
 };
 

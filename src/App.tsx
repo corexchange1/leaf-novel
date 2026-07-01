@@ -29,7 +29,7 @@ import {
 import type { Chapter, ChapterContent, MockUser, ReaderSettings, Story } from './types';
 import { api } from './lib/api';
 import { appInfo } from './lib/appInfo';
-import { downloadApk } from './lib/appUpdater';
+import { downloadApk, getDeviceFlavor } from './lib/appUpdater';
 import { officialUpdateUrl } from './lib/storage';
 import { useLibraryStore } from './store/useLibraryStore';
 import { chapterLabel, clamp, formatDateTime, formatMinutes } from './utils/format';
@@ -1189,7 +1189,8 @@ function MePage() {
       if (result.dataUpdated) notes.push(`Đã cập nhật ${result.storyCount} truyện`);
       if (result.appUpdate) {
         notes.push(`Có app mới ${result.appUpdate.versionName}`);
-        setUpdateApkUrl(result.appUpdate.tabletApkUrl || result.appUpdate.phoneApkUrl || '');
+        const flavor = await getDeviceFlavor();
+        setUpdateApkUrl(flavor === 'tablet' ? result.appUpdate.tabletApkUrl || result.appUpdate.phoneApkUrl || '' : result.appUpdate.phoneApkUrl || result.appUpdate.tabletApkUrl || '');
       }
       setUpdateNotice(notes.length ? notes.join(' • ') : 'Đang là bản mới nhất.');
     } catch (error) {
