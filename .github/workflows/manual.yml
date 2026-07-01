@@ -3,6 +3,10 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,8 +35,8 @@ jobs:
         run: |
           VERSION=$(node -e "const fs=require('fs'); const m=fs.readFileSync('src/lib/appInfo.ts','utf8').match(/versionName:\s*'([^']+)'/); console.log(m?m[1]:'1.29')")
           mkdir -p artifacts
-          cp android/app/build/outputs/apk/phone/debug/app-phone-debug.apk artifacts/leaf-novel-v\${VERSION}-phone-debug.apk
-          cp android/app/build/outputs/apk/tablet/debug/app-tablet-debug.apk artifacts/leaf-novel-v\${VERSION}-tablet-debug.apk
+          cp android/app/build/outputs/apk/phone/debug/app-phone-debug.apk artifacts/leaf-novel-v${VERSION}-phone-debug.apk
+          cp android/app/build/outputs/apk/tablet/debug/app-tablet-debug.apk artifacts/leaf-novel-v${VERSION}-tablet-debug.apk
       - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
