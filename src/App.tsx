@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import {
@@ -10,7 +10,6 @@ import {
   CircleUserRound,
   Clock3,
   Filter,
-  FolderSync,
   Headphones,
   Home,
   Library,
@@ -30,6 +29,7 @@ import {
 import type { Chapter, ChapterContent, MockUser, ReaderSettings, Story } from './types';
 import { api } from './lib/api';
 import { appInfo } from './lib/appInfo';
+import { officialUpdateUrl } from './lib/storage';
 import { useLibraryStore } from './store/useLibraryStore';
 import { chapterLabel, clamp, formatDateTime, formatMinutes } from './utils/format';
 import { chapterToBlocks } from './utils/markdown';
@@ -258,7 +258,6 @@ function LoginPage() {
 function useStories() {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
-  const updateUrl = useLibraryStore((state) => state.settings.updateUrl);
   const autoUpdate = useLibraryStore((state) => state.settings.autoUpdate);
 
   useEffect(() => {
@@ -270,11 +269,11 @@ function useStories() {
     });
     const syncAndLoad = () => {
       load();
-      if (!autoUpdate || !updateUrl.trim()) return;
+      if (!autoUpdate) return;
       const stale = Date.now() - lastRemoteSync > 10 * 60_000;
       if (!remoteSyncPromise && stale) {
         remoteSyncPromise = api
-          .syncRemote(updateUrl)
+          .syncRemote(officialUpdateUrl)
           .then(() => {
             lastRemoteSync = Date.now();
           })
@@ -294,7 +293,7 @@ function useStories() {
       window.clearInterval(interval);
       window.removeEventListener('leafnovel:local-library-updated', load);
     };
-  }, [autoUpdate, updateUrl]);
+  }, [autoUpdate]);
 
   return { stories, loading };
 }
@@ -412,30 +411,28 @@ function ContinueReadingCard({ story, progress }: { story?: Story; progress?: { 
   }
 
   return (
-    <article className="continue-card rounded-[28px] bg-gradient-to-br from-[#E6FAF6] via-white to-[#DDF7F5] p-3.5 shadow-soft">
-      <div className="mb-2">
-        <div>
-          <p className="text-[14px] font-medium uppercase tracking-[0.14em] text-app-primaryDark">Đọc tiếp</p>
-          <h2 className="mt-1 text-[22px] font-semibold leading-tight">{story.title}</h2>
-        </div>
-      </div>
-      <div className="flex gap-4">
-        <Cover story={story} className="h-28 w-20 rounded-[20px]" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-medium text-app-muted">{chapterLabel(progress.chapterNumber, story.totalChapters)}</p>
-          <div className="mt-4 h-2 rounded-full bg-white">
+    <article className="continue-card rounded-[26px] bg-gradient-to-br from-[#E6FAF6] via-white to-[#DDF7F5] p-4 shadow-soft">
+      <div className="flex items-stretch gap-4">
+        <Cover story={story} className="h-36 w-24 shrink-0 rounded-[20px]" />
+        <div className="flex min-w-0 flex-1 flex-col justify-between py-1">
+          <div>
+            <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-app-primaryDark">Đọc tiếp</p>
+            <h2 className="mt-1 line-clamp-2 text-[20px] font-semibold leading-tight">{story.title}</h2>
+            <p className="mt-2 text-[14px] font-semibold text-app-muted">{chapterLabel(progress.chapterNumber, story.totalChapters)}</p>
+          </div>
+          <div className="mt-3 h-2 rounded-full bg-white/90">
             <div className="h-2 rounded-full bg-app-primary" style={{ width: `${clamp(progress.scrollPercent, 0, 100)}%` }} />
           </div>
-          <p className="mt-3 text-[13px] font-semibold text-app-muted">Đọc lúc {formatDateTime(progress.updatedAt)}</p>
           <button
             type="button"
             onClick={() => navigate(`/read/${story.id}/${progress.chapterNumber}`)}
-            className="mt-4 min-h-11 rounded-button bg-app-primary px-5 text-[15px] font-semibold text-white shadow-soft active:scale-[0.98]"
+            className="mt-3 flex min-h-11 w-full items-center justify-center rounded-button bg-app-primary px-5 text-center text-[15px] font-semibold text-white shadow-soft active:scale-[0.98]"
           >
             Đọc tiếp
           </button>
         </div>
       </div>
+      <p className="mt-3 text-center text-[13px] font-semibold text-app-muted">Đọc lần cuối: {formatDateTime(progress.updatedAt)}</p>
     </article>
   );
 }
@@ -559,8 +556,6 @@ function FilterSheet({
 function StoryDetailPage({ storyId }: { storyId: string }) {
   const [story, setStory] = useState<Story | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
-  const [importNotice, setImportNotice] = useState('');
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const darkMode = useLibraryStore((state) => state.settings.darkMode);
   const progress = useLibraryStore((state) => state.progress[storyId]);
 
@@ -572,20 +567,6 @@ function StoryDetailPage({ storyId }: { storyId: string }) {
   if (!story) return <LoadingPage label="Đang mở truyện..." />;
   const latestChapter = progress?.chapterNumber ?? 1;
   const visibleChapters = [...chapters].reverse().slice(0, 8);
-  const onChapterFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.currentTarget.files ?? []);
-    event.currentTarget.value = '';
-    if (!files.length) return;
-
-    let nextChapters = chapters;
-    for (const file of files) {
-      await api.importChapter(story, file, nextChapters);
-      nextChapters = await api.chapters(story.id);
-    }
-    setStory(await api.story(story.id));
-    setChapters(nextChapters);
-    setImportNotice(`Đã nhét ${files.length} chương vào máy.`);
-  };
 
   return (
     <section className="space-y-5 px-5 pb-8 pt-[calc(14px+env(safe-area-inset-top))] md:px-8">
@@ -602,39 +583,19 @@ function StoryDetailPage({ storyId }: { storyId: string }) {
         <button
           type="button"
           onClick={() => navigate(`/read/${story.id}/${latestChapter}`)}
-          className="min-h-[52px] rounded-button bg-app-primary px-4 text-[17px] font-semibold text-white shadow-soft active:scale-[0.98]"
+          className="flex min-h-[52px] items-center justify-center rounded-button bg-app-primary px-4 text-center text-[17px] font-semibold text-white shadow-soft active:scale-[0.98]"
         >
           Đọc tiếp
         </button>
         <button
           type="button"
           onClick={() => navigate(`/read/${story.id}/1`)}
-          className={`min-h-[52px] rounded-button border border-app-border px-4 text-[17px] font-semibold shadow-soft active:scale-[0.98] ${
+          className={`flex min-h-[52px] items-center justify-center rounded-button border border-app-border px-4 text-center text-[17px] font-semibold shadow-soft active:scale-[0.98] ${
             darkMode ? 'bg-[#111827] text-[#F8FAFC]' : 'bg-white text-app-text'
           }`}
         >
           Đọc từ đầu
         </button>
-      </div>
-
-      <div className={`rounded-card border border-app-border p-4 shadow-soft ${darkMode ? 'bg-[#111827]' : 'bg-white'}`}>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".md,.html,text/markdown,text/html,text/plain"
-          multiple
-          className="hidden"
-          onChange={onChapterFileChange}
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-button bg-app-primarySoft px-4 text-[16px] font-semibold text-app-primaryDark active:scale-[0.98]"
-        >
-          <FolderSync size={19} />
-          Nhét chap từ máy
-        </button>
-        {importNotice && <p className="mt-3 text-center text-[13px] font-semibold text-app-muted">{importNotice}</p>}
       </div>
 
       <InfoCard icon={<BookOpen size={20} />} title="Tóm tắt" text={story.summary} darkMode={darkMode} />
@@ -726,6 +687,15 @@ function ReaderPage({ storyId, chapterNumber }: { storyId: string; chapterNumber
   }, [chapterNumber, storyId]);
 
   useEffect(() => {
+    const onPop = () => {
+      const state = window.history.state as { readerSettings?: boolean } | null;
+      if (!state?.readerSettings) setSettingsOpen(false);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  useEffect(() => {
     api.story(storyId).then(setStory);
     api.chapters(storyId).then(setChapters);
     setChapter(null);
@@ -785,6 +755,18 @@ function ReaderPage({ storyId, chapterNumber }: { storyId: string; chapterNumber
   const bgClass = readerBgClass(settings.background);
   const fontClass = settings.fontFamily === 'serif' ? 'font-serif' : 'font-sans';
   const readerIsDark = settings.darkMode || settings.background === 'dark';
+  const openReaderSettings = () => {
+    window.history.pushState({ app: true, readerSettings: true }, '', `/read/${storyId}/${chapterNumber}`);
+    setSettingsOpen(true);
+  };
+  const closeReaderSettings = () => {
+    const state = window.history.state as { readerSettings?: boolean } | null;
+    if (state?.readerSettings) {
+      window.history.back();
+      return;
+    }
+    setSettingsOpen(false);
+  };
 
   if (chapterError) return <ReaderErrorPage message={chapterError} storyId={storyId} />;
   if (!story || !chapter) return <LoadingPage label="Đang mở chương..." fullScreen />;
@@ -881,16 +863,16 @@ function ReaderPage({ storyId, chapterNumber }: { storyId: string; chapterNumber
 
       <button
         type="button"
-        onClick={() => setSettingsOpen(true)}
+        onClick={openReaderSettings}
         className={`fixed bottom-[calc(72px+env(safe-area-inset-bottom))] right-[max(18px,calc((100vw-480px)/2+18px))] z-30 grid h-12 w-12 place-items-center rounded-full bg-white text-[17px] font-semibold text-app-primaryDark shadow-float transition active:scale-[0.96] ${
-          showNextChapter ? 'pointer-events-none translate-y-2 opacity-0' : uiVisible ? 'opacity-100' : 'opacity-80'
+          showNextChapter || (!uiVisible && !settingsOpen) ? 'pointer-events-none translate-y-3 opacity-0' : 'opacity-100'
         }`}
       >
         Aa
       </button>
 
       <ReaderProgressFooter percent={scrollPercent} visible={uiVisible && !showNextChapter} background={settings.background} />
-      <ReaderSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <ReaderSettingsSheet open={settingsOpen} onClose={closeReaderSettings} />
     </main>
   );
 }
@@ -938,20 +920,14 @@ function ReaderProgressFooter({
   visible: boolean;
   background: ReaderSettings['background'];
 }) {
-  const page = Math.max(1, Math.ceil(percent / 5));
   return (
     <footer
-      className={`fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[480px] border-t border-black/5 px-5 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl transition-transform duration-200 md:max-w-none md:px-10 ${
+      className={`fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[480px] border-t border-black/5 px-5 pb-[calc(14px+env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl transition-transform duration-200 md:max-w-none md:px-10 ${
         visible ? 'translate-y-0' : 'translate-y-full'
       } ${background === 'dark' ? 'bg-[#101828]/90 text-white' : 'bg-white/86 text-app-text'}`}
     >
-      <div className="mb-2 h-1.5 rounded-full bg-black/10">
+      <div className="h-1.5 rounded-full bg-black/10">
         <div className="h-1.5 rounded-full bg-app-primary" style={{ width: `${percent}%` }} />
-      </div>
-      <div className="flex items-center justify-between text-[13px] font-semibold opacity-75">
-        <span>{Math.round(percent)}%</span>
-        <span>Trang {page} / 20</span>
-        <span>Còn {Math.max(0, 20 - page)} trang</span>
       </div>
     </footer>
   );
@@ -1017,13 +993,13 @@ function ReaderSettingsSheet({ open, onClose }: { open: boolean; onClose: () => 
         <button
           type="button"
           onClick={() => setSettings({ hideUI: !settings.hideUI })}
-          className="flex min-h-16 w-full items-center justify-between gap-4 rounded-card bg-app-primarySoft px-4 text-left"
+          className="flex min-h-16 w-full items-center justify-between gap-3 rounded-card bg-app-primarySoft px-4 text-left"
         >
-          <span>
+          <span className="min-w-0 flex-1">
             <span className="block text-[16px] font-semibold">Ẩn UI</span>
-            <span className="block text-[13px] font-semibold text-app-muted">Ẩn thanh trên/dưới khi đọc</span>
+            <span className="mt-0.5 block text-[13px] font-semibold leading-snug text-app-muted">Ẩn thanh trên/dưới khi đọc</span>
           </span>
-          <span className={`flex h-8 w-14 items-center rounded-full p-1 transition ${settings.hideUI ? 'bg-app-primary' : 'bg-app-border'}`}>
+          <span className={`flex h-8 w-14 shrink-0 items-center rounded-full p-1 transition ${settings.hideUI ? 'bg-app-primary' : 'bg-app-border'}`}>
             <span className={`h-6 w-6 rounded-full bg-white transition ${settings.hideUI ? 'translate-x-6' : 'translate-x-0'}`} />
           </span>
         </button>
@@ -1047,13 +1023,13 @@ function ToggleRow({
     <button
       type="button"
       onClick={onChange}
-      className="flex min-h-16 w-full items-center justify-between gap-4 rounded-card bg-app-primarySoft px-4 text-left"
+      className="flex min-h-16 w-full items-center justify-between gap-3 rounded-card bg-app-primarySoft px-4 text-left"
     >
-      <span>
+      <span className="min-w-0 flex-1">
         <span className="block text-[16px] font-semibold">{title}</span>
-        {description && <span className="block text-[13px] font-semibold text-app-muted">{description}</span>}
+        {description && <span className="mt-0.5 block text-[13px] font-semibold leading-snug text-app-muted">{description}</span>}
       </span>
-      <span className={`flex h-8 w-14 items-center rounded-full p-1 transition ${checked ? 'bg-app-primary' : 'bg-app-border'}`}>
+      <span className={`flex h-8 w-14 shrink-0 items-center rounded-full p-1 transition ${checked ? 'bg-app-primary' : 'bg-app-border'}`}>
         <span className={`h-6 w-6 rounded-full bg-white transition ${checked ? 'translate-x-6' : 'translate-x-0'}`} />
       </span>
     </button>
@@ -1152,14 +1128,10 @@ function MePage() {
   if (!user) return null;
 
   const syncGithubNow = async () => {
-    if (!settings.updateUrl.trim()) {
-      setUpdateNotice('Chưa có nguồn cập nhật.');
-      return;
-    }
     setUpdateNotice('Đang kiểm tra cập nhật...');
     setUpdateApkUrl('');
     try {
-      const result = await api.syncRemote(settings.updateUrl);
+      const result = await api.syncRemote(officialUpdateUrl);
       const notes = [];
       if (result.dataUpdated) notes.push(`Đã cập nhật ${result.storyCount} truyện`);
       if (result.appUpdate) {
@@ -1167,8 +1139,8 @@ function MePage() {
         setUpdateApkUrl(result.appUpdate.tabletApkUrl || result.appUpdate.phoneApkUrl || '');
       }
       setUpdateNotice(notes.length ? notes.join(' • ') : 'Đang là bản mới nhất.');
-    } catch {
-      setUpdateNotice('Không cập nhật được.');
+    } catch (error) {
+      setUpdateNotice(error instanceof Error ? `Không cập nhật được: ${error.message}` : 'Không cập nhật được.');
     }
   };
 
@@ -1199,7 +1171,7 @@ function MePage() {
         </div>
         <div className="mt-5 grid grid-cols-3 gap-2">
           <MiniStat value={`${Math.round(stats.totalMinutesRead / 60)}`} label="giờ" />
-          <MiniStat value={`${Math.max(stats.readStoryIds.length, recent.length, 18)}`} label="truyện" />
+          <MiniStat value={`${Math.max(stats.readStoryIds.length, recent.length)}`} label="truyện" />
           <MiniStat value={`${stats.streakDays}`} label="ngày liền" />
         </div>
       </section>
@@ -1250,7 +1222,7 @@ function MePage() {
           <button
             type="button"
             onClick={syncGithubNow}
-            className="min-h-[48px] w-full rounded-button bg-app-primarySoft text-[15px] font-semibold text-app-primaryDark"
+            className="flex min-h-[48px] w-full items-center justify-center rounded-button bg-app-primarySoft text-center text-[15px] font-semibold text-app-primaryDark"
           >
             Kiểm tra cập nhật
           </button>
@@ -1259,7 +1231,7 @@ function MePage() {
             <button
               type="button"
               onClick={() => window.open(updateApkUrl, '_blank')}
-              className="min-h-[48px] w-full rounded-button border border-app-border bg-white text-[15px] font-semibold shadow-soft"
+              className="flex min-h-[48px] w-full items-center justify-center rounded-button border border-app-border bg-white text-center text-[15px] font-semibold shadow-soft"
             >
               Tải bản app mới
             </button>
@@ -1269,7 +1241,7 @@ function MePage() {
       </section>
 
       <div className="grid gap-3">
-        <button type="button" onClick={logout} className="min-h-[52px] rounded-button bg-white text-[16px] font-semibold text-app-danger shadow-soft">
+        <button type="button" onClick={logout} className="flex min-h-[52px] items-center justify-center rounded-button bg-white text-center text-[16px] font-semibold text-app-danger shadow-soft">
           <LogOut className="mr-2 inline" size={18} />
           Đăng xuất
         </button>
@@ -1318,7 +1290,7 @@ function RecentRow({ story, chapterNumber, updatedAt }: { story: Story; chapterN
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[16px] font-semibold">{story.title}</span>
         <span className="mt-0.5 block text-[14px] font-medium text-app-muted">Chương {chapterNumber}</span>
-        <span className="mt-0.5 block text-[12px] font-semibold text-app-muted">Đọc lúc {formatDateTime(updatedAt)}</span>
+        <span className="mt-0.5 block text-[12px] font-semibold text-app-muted">Đọc lần cuối: {formatDateTime(updatedAt)}</span>
       </span>
       <ChevronRight size={19} className="text-app-muted" />
     </button>
@@ -1391,7 +1363,7 @@ function BottomSheet({ title, children, onClose }: { title: string; children: Re
   return (
     <div className="fixed inset-0 z-50 mx-auto w-full max-w-[480px] bg-black/25 md:max-w-none" onClick={onClose}>
       <div
-        className={`absolute inset-x-0 bottom-0 rounded-t-[30px] px-5 pb-[calc(22px+env(safe-area-inset-bottom))] pt-3 shadow-float animate-slideUp md:px-8 ${darkMode ? 'dark-sheet bg-[#0B111B] text-[#F8FAFC]' : 'bg-app-bg'}`}
+        className={`absolute inset-x-0 bottom-0 max-h-[88vh] overflow-y-auto rounded-t-[30px] px-5 pb-[calc(22px+env(safe-area-inset-bottom))] pt-3 shadow-float animate-slideUp md:px-8 ${darkMode ? 'dark-sheet bg-[#0B111B] text-[#F8FAFC]' : 'bg-app-bg'}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-app-border" />

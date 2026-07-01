@@ -8,6 +8,9 @@ const keys = {
   stats: 'leafnovel:stats',
 };
 
+export const officialUpdateUrl =
+  import.meta.env.VITE_STORY_UPDATE_URL || 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public/updates/stories-index.json';
+
 export const officialAccounts = [
   { id: 'min', username: 'min', password: '123456', email: 'min@leafnovel.local', defaultName: 'Min' },
   { id: 'nh', username: 'nh', password: '123456', email: 'nh@leafnovel.local', defaultName: 'Nh' },
@@ -21,7 +24,7 @@ export const defaultReaderSettings: ReaderSettings = {
   hideUI: true,
   dialogueColors: true,
   lineHeight: 1.82,
-  updateUrl: import.meta.env.VITE_STORY_UPDATE_URL || 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public/updates/stories-index.json',
+  updateUrl: officialUpdateUrl,
   autoUpdate: true,
 };
 
@@ -62,6 +65,40 @@ export function writeStorage<T>(key: string, value: T) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+function sessionId() {
+  return readStorage<string>(keys.session, '');
+}
+
+function statsKey() {
+  const accountId = sessionId();
+  return accountId ? `${keys.stats}:${accountId}` : keys.stats;
+}
+
+function normalizeStats(stats: ReadingStats): ReadingStats {
+  return {
+    ...defaultStats,
+    ...stats,
+    totalMinutesRead: Number(stats.totalMinutesRead || 0),
+    todayMinutesRead: Number(stats.todayMinutesRead || 0),
+    weekMinutesRead: Number(stats.weekMinutesRead || 0),
+    monthMinutesRead: Number(stats.monthMinutesRead || 0),
+    streakDays: Number(stats.streakDays || 0),
+    readStoryIds: Array.isArray(stats.readStoryIds) ? stats.readStoryIds : [],
+  };
+}
+
+function getStatsForCurrentUser() {
+  const accountKey = statsKey();
+  const accountStats = readStorage<ReadingStats | null>(accountKey, null);
+  if (accountStats) return normalizeStats(accountStats);
+
+  const legacyStats = readStorage<ReadingStats | null>(keys.stats, null);
+  if (!legacyStats) return defaultStats;
+
+  const cameFromFakeSeed = !legacyStats.lastReadDate && Number(legacyStats.totalMinutesRead || 0) >= 7000;
+  return cameFromFakeSeed ? defaultStats : normalizeStats(legacyStats);
+}
+
 function defaultUser(accountId: string): MockUser | null {
   const account = officialAccounts.find((item) => item.id === accountId);
   if (!account) return null;
@@ -95,10 +132,10 @@ export const storage = {
     const users = readStorage<Record<string, MockUser>>(keys.user, {});
     writeStorage(keys.user, { ...users, [user.id]: user });
   },
-  getSettings: () => readStorage(keys.settings, defaultReaderSettings),
+  getSettings: () => ({ ...readStorage(keys.settings, defaultReaderSettings), updateUrl: officialUpdateUrl }),
   setSettings: (settings: ReaderSettings) => writeStorage(keys.settings, settings),
-  getStats: () => readStorage(keys.stats, defaultStats),
-  setStats: (stats: ReadingStats) => writeStorage(keys.stats, stats),
+  getStats: () => getStatsForCurrentUser(),
+  setStats: (stats: ReadingStats) => writeStorage(statsKey(), stats),
   getProgressMap: () => readStorage<Record<string, ReadingProgress>>(keys.progress, {}),
   setProgressMap: (map: Record<string, ReadingProgress>) => writeStorage(keys.progress, map),
 };
