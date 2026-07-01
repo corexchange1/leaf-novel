@@ -33,6 +33,14 @@ export type AudioChapter = {
   title: string;
   filename: string;
   audioUrl: string;
+  variants?: AudioVariant[];
+};
+
+export type AudioVariant = {
+  id: string;
+  label: string;
+  filename: string;
+  audioUrl: string;
 };
 
 export type ReaderSettings = {

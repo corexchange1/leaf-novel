@@ -31,7 +31,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react';
-import type { AudioChapter, Chapter, ChapterContent, MockUser, ReaderSettings, Story } from './types';
+import type { AudioChapter, AudioVariant, Chapter, ChapterContent, MockUser, ReaderSettings, Story } from './types';
 import { api } from './lib/api';
 import { appInfo } from './lib/appInfo';
 import { downloadApk, getDeviceProfile } from './lib/appUpdater';
@@ -1442,18 +1442,24 @@ function normalizeAudioManifest(data: unknown, manifestUrl: string): AudioStory[
   const stories = (data as { stories?: AudioStory[] })?.stories;
   if (!Array.isArray(stories)) return [];
   const publicBase = manifestUrl.startsWith('http') ? manifestUrl.replace(/\/audio\/manifest\.json(?:\?.*)?$/, '') : '';
+  const resolveAudioUrl = (audioUrl: string) =>
+    publicBase && audioUrl && !/^https?:\/\//i.test(audioUrl) ? `${publicBase}/${audioUrl.replace(/^\/+/, '')}` : audioUrl;
 
   return stories
     .filter((item) => item?.story?.id && Array.isArray(item.chapters))
     .map((item) => ({
       story: item.story,
-      chapters: item.chapters.map((chapter) => ({
-        ...chapter,
-        audioUrl:
-          publicBase && chapter.audioUrl && !/^https?:\/\//i.test(chapter.audioUrl)
-            ? `${publicBase}/${chapter.audioUrl.replace(/^\/+/, '')}`
-            : chapter.audioUrl,
-      })),
+      chapters: item.chapters.map((chapter) => {
+        const variants = Array.isArray(chapter.variants) && chapter.variants.length ? chapter.variants : [
+          { id: 'main', label: 'Lồng', filename: chapter.filename, audioUrl: chapter.audioUrl },
+        ];
+        const normalizedVariants = variants.map((variant) => ({ ...variant, audioUrl: resolveAudioUrl(variant.audioUrl) }));
+        return {
+          ...chapter,
+          audioUrl: resolveAudioUrl(chapter.audioUrl),
+          variants: normalizedVariants,
+        };
+      }),
     }));
 }
 
@@ -1588,7 +1594,9 @@ function AudioPage() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[16px] font-semibold">{chapter.title}</span>
-                    <span className="mt-0.5 block text-[12px] font-semibold opacity-70">{chapter.filename}</span>
+                    <span className="mt-0.5 block text-[12px] font-semibold opacity-70">
+                      {chapter.variants?.length ? `${chapter.variants.length} bản nghe` : chapter.filename}
+                    </span>
                   </span>
                   <ChevronRight size={18} className="shrink-0 opacity-70" />
                 </button>
@@ -1646,6 +1654,15 @@ function AudioChapterPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const variants = useMemo<AudioVariant[]>(
+    () =>
+      chapter.variants?.length
+        ? chapter.variants
+        : [{ id: 'main', label: 'Lồng', filename: chapter.filename, audioUrl: chapter.audioUrl }],
+    [chapter.audioUrl, chapter.filename, chapter.variants],
+  );
+  const [selectedVariantId, setSelectedVariantId] = useState(variants[0]?.id || 'main');
+  const selectedVariant = variants.find((variant) => variant.id === selectedVariantId) || variants[0];
   const speedOptions = [0.75, 1, 1.25, 1.5, 2];
 
   const seekBy = (seconds: number) => {
@@ -1679,6 +1696,10 @@ function AudioChapterPlayer({
   }, [playbackRate]);
 
   useEffect(() => {
+    setSelectedVariantId((current) => (variants.some((variant) => variant.id === current) ? current : variants[0]?.id || 'main'));
+  }, [variants]);
+
+  useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -1708,12 +1729,12 @@ function AudioChapterPlayer({
       audio.removeEventListener('pause', syncPlaying);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [chapter.audioUrl, nextChapter, onNext]);
+  }, [selectedVariant?.audioUrl, nextChapter, onNext]);
 
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: chapter.title,
+      title: `${chapter.title} - ${selectedVariant?.label || 'Audio'}`,
       artist: story.title,
       album: 'Leaf Novel',
       artwork: story.coverUrl ? [{ src: story.coverUrl, sizes: '512x512', type: 'image/png' }] : undefined,
@@ -1746,11 +1767,11 @@ function AudioChapterPlayer({
       setHandler('nexttrack', null);
       setHandler('seekto', null);
     };
-  }, [chapter.title, story.title, story.coverUrl, previousChapter, nextChapter, onPrevious, onNext]);
+  }, [chapter.title, selectedVariant?.label, story.title, story.coverUrl, previousChapter, nextChapter, onPrevious, onNext]);
 
   return (
     <article className="rounded-card bg-app-bg p-4">
-      <audio ref={audioRef} src={chapter.audioUrl} preload="metadata" />
+      <audio ref={audioRef} src={selectedVariant?.audioUrl} preload="metadata" />
       <div className="mb-4 flex items-center gap-3">
         <div className={`audio-disc h-20 w-20 shrink-0 ${playing ? 'is-playing' : ''}`}>
           <Cover story={story as Story} className="h-full w-full rounded-full" />
@@ -1758,9 +1779,31 @@ function AudioChapterPlayer({
         <div className="min-w-0 flex-1">
           <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-app-muted">Đang nghe</p>
           <h3 className="mt-1 line-clamp-2 text-[18px] font-semibold leading-tight">{chapter.title}</h3>
-          <p className="mt-1 truncate text-[13px] font-semibold text-app-muted">{story.title}</p>
+          <p className="mt-1 truncate text-[13px] font-semibold text-app-muted">{story.title} - {selectedVariant?.label}</p>
         </div>
       </div>
+
+      {variants.length > 1 && (
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          {variants.map((variant) => (
+            <button
+              type="button"
+              key={variant.id}
+              onClick={() => {
+                audioRef.current?.pause();
+                setSelectedVariantId(variant.id);
+                setCurrentTime(0);
+                setDuration(0);
+              }}
+              className={`min-h-11 rounded-full text-[14px] font-semibold ${
+                selectedVariant?.id === variant.id ? 'bg-app-primary text-white' : 'bg-white text-app-muted'
+              }`}
+            >
+              {variant.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="space-y-2">
         <input
@@ -1831,7 +1874,7 @@ function AudioChapterPlayer({
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-semibold">{chapter.title}</p>
-            <p className="truncate text-[11px] font-medium text-white/65">{formatAudioTime(currentTime)} / {formatAudioTime(duration)}</p>
+            <p className="truncate text-[11px] font-medium text-white/65">{selectedVariant?.label} - {formatAudioTime(currentTime)} / {formatAudioTime(duration)}</p>
           </div>
           <button type="button" onClick={() => void togglePlay()} className="grid h-9 w-9 place-items-center rounded-full bg-white/12" aria-label="Tạm dừng">
             <Pause size={18} />

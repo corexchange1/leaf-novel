@@ -12,8 +12,8 @@ const audioDir = path.join(root, 'audio');
 const outDir = path.join(root, 'public', 'bundled-stories');
 const audioOutDir = path.join(root, 'public', 'audio');
 const updatesDir = path.join(root, 'public', 'updates');
-const appVersionName = '1.25';
-const appVersionCode = 26;
+const appVersionName = '1.26';
+const appVersionCode = 27;
 const releaseBaseUrl = `https://github.com/corexchange1/leaf-novel/releases/download/v${appVersionName}`;
 const rawPublicBaseUrl = 'https://raw.githubusercontent.com/corexchange1/leaf-novel/master/public';
 const imageExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp']);
@@ -55,6 +55,22 @@ function isAudioEntry(entry) {
 
 function fileStem(filename) {
   return filename.replace(/\.[^.]+$/, '');
+}
+
+function audioVariantId(filename) {
+  return fileStem(filename).replace(/^\d+[-_]?/, '') || 'main';
+}
+
+function audioVariantLabel(filename) {
+  const id = audioVariantId(filename);
+  if (/tell|ke|kể|narr/i.test(id)) return 'Kể truyện';
+  if (/long|lồng|voice|cast/i.test(id)) return 'Lồng';
+  if (id === 'main') return 'Lồng';
+  return id
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 function chapterImageAssets(entries, chapterNumber) {
@@ -320,7 +336,7 @@ async function readStory(storyId) {
 
 async function copyAudioForStory(storyId, chapters) {
   const sources = [path.join(audioDir, storyId), path.join(storiesDir, storyId, 'audio')];
-  const tracks = [];
+  const tracks = new Map();
   const seen = new Set();
 
   for (const sourceDir of sources) {
@@ -330,7 +346,7 @@ async function copyAudioForStory(storyId, chapters) {
       if (!isAudioEntry(entry)) continue;
       const number = Number.parseInt(entry.name, 10);
       if (!Number.isFinite(number) || number <= 0) continue;
-      const key = `${storyId}:${number}`;
+      const key = `${storyId}:${number}:${entry.name}`;
       if (seen.has(key)) continue;
       seen.add(key);
 
@@ -339,17 +355,37 @@ async function copyAudioForStory(storyId, chapters) {
       await fs.mkdir(targetDir, { recursive: true });
       await fs.copyFile(path.join(sourceDir, entry.name), target);
       const chapter = chapters.find((item) => item.number === number);
-      tracks.push({
-        storyId,
-        chapterNumber: number,
-        title: chapter?.title || `Chương ${String(number).padStart(3, '0')}`,
+      const variant = {
+        id: audioVariantId(entry.name),
+        label: audioVariantLabel(entry.name),
         filename: entry.name,
         audioUrl: `/audio/${storyId}/${entry.name}`,
-      });
+      };
+      const current =
+        tracks.get(number) || {
+          storyId,
+          chapterNumber: number,
+          title: chapter?.title || `Chương ${String(number).padStart(3, '0')}`,
+          filename: entry.name,
+          audioUrl: variant.audioUrl,
+          variants: [],
+        };
+      current.variants.push(variant);
+      current.filename = current.variants[0].filename;
+      current.audioUrl = current.variants[0].audioUrl;
+      tracks.set(number, current);
     }
   }
 
-  return tracks.sort((a, b) => a.chapterNumber - b.chapterNumber);
+  return Array.from(tracks.values())
+    .map((track) => ({
+      ...track,
+      variants: track.variants.sort((a, b) => {
+        const rank = (value) => (value.id === 'long' || value.id === 'main' ? 0 : value.id === 'tell' ? 1 : 2);
+        return rank(a) - rank(b) || a.label.localeCompare(b.label, 'vi-VN');
+      }),
+    }))
+    .sort((a, b) => a.chapterNumber - b.chapterNumber);
 }
 
 async function writeAudioManifest(stories) {
