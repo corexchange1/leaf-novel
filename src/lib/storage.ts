@@ -68,7 +68,7 @@ export function readStorage<T>(key: string, fallback: T): T {
 }
 
 export function writeStorage<T>(key: string, value: T) {
-  localStorage.setItem(key, JSON.stringify(value));
+  safeWriteStorage(key, value);
 }
 
 function sessionId() {
@@ -182,6 +182,65 @@ export async function syncAccounts(url = officialAccountsUrl) {
     return accounts;
   } catch {
     return accountRecords();
+  }
+}
+
+const CACHE_DB_NAME = 'leafnovel-cache';
+const CACHE_DB_VERSION = 1;
+const CACHE_STORE_NAME = 'github-library';
+
+function openCacheDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') return reject(new Error('indexedDB not available'));
+    const request = indexedDB.open(CACHE_DB_NAME, CACHE_DB_VERSION);
+    request.onupgradeneeded = () => { request.result.createObjectStore(CACHE_STORE_NAME); };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getCacheItem<T>(key: string): Promise<T | null> {
+  try {
+    const db = await openCacheDB();
+    return await new Promise((resolve, reject) => {
+      const req = db.transaction(CACHE_STORE_NAME, 'readonly').objectStore(CACHE_STORE_NAME).get(key);
+      req.onsuccess = () => { resolve(req.result ?? null); db.close(); };
+      req.onerror = () => { reject(req.error); db.close(); };
+    });
+  } catch { return null; }
+}
+
+export async function setCacheItem<T>(key: string, value: T): Promise<void> {
+  try {
+    const db = await openCacheDB();
+    await new Promise((resolve, reject) => {
+      const req = db.transaction(CACHE_STORE_NAME, 'readwrite').objectStore(CACHE_STORE_NAME).put(value, key);
+      req.onsuccess = () => { resolve(undefined); db.close(); };
+      req.onerror = () => { reject(req.error); db.close(); };
+    });
+  } catch (e) { console.error('[storage] IndexedDB write failed:', e); }
+}
+
+export async function removeCacheItem(key: string): Promise<void> {
+  try {
+    const db = await openCacheDB();
+    await new Promise((resolve, reject) => {
+      const req = db.transaction(CACHE_STORE_NAME, 'readwrite').objectStore(CACHE_STORE_NAME).delete(key);
+      req.onsuccess = () => { resolve(undefined); db.close(); };
+      req.onerror = () => { reject(req.error); db.close(); };
+    });
+  } catch { /* ignore */ }
+}
+
+export function safeWriteStorage<T>(key: string, value: T): boolean {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+      console.warn(`[storage] localStorage quota exceeded for "${key}"`);
+    }
+    return false;
   }
 }
 

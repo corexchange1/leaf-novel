@@ -32,7 +32,7 @@ export const api = {
     return chapters.length ? chapters : mockChapters(id);
   },
   chapter: async (id: string, chapterNumber: number) => {
-    const localChapter = localLibrary.chapter(id, chapterNumber);
+    const localChapter = await localLibrary.chapter(id, chapterNumber);
     if (localChapter) return localChapter;
 
     try {

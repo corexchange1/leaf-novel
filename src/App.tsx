@@ -1320,7 +1320,8 @@ function MePage() {
       }
       setUpdateNotice(result.dataUpdated ? 'Đã cập nhật truyện.' : 'Đang là bản mới nhất.');
     } catch (error) {
-      setUpdateNotice(error instanceof Error ? `Không cập nhật được: ${error.message}` : 'Không cập nhật được.');
+      console.warn('[syncRemote]', error);
+      setUpdateNotice('Không cập nhật được. Vui lòng kiểm tra kết nối mạng và thử lại.');
     }
   };
   const downloadUpdateApk = async () => {

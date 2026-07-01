@@ -1,6 +1,7 @@
 import type { Chapter, ChapterContent, Story } from '../types';
 import JSZip from 'jszip';
 import { appInfo } from './appInfo';
+import { getCacheItem, setCacheItem, safeWriteStorage } from './storage';
 
 type BundledStory = {
   story: Story;
@@ -47,6 +48,27 @@ function blankState(): LocalLibraryState {
   return { stories: {}, chapters: {} };
 }
 
+let remoteMemoryCache: LocalLibraryState | null = null;
+
+async function loadRemoteCache() {
+  try {
+    const data = await getCacheItem<LocalLibraryState>('github-library-data');
+    if (data) { remoteMemoryCache = data; return; }
+  } catch { /* ignore */ }
+  try {
+    const raw = localStorage.getItem(remoteKey);
+    if (raw) {
+      const state = { ...blankState(), ...JSON.parse(raw) };
+      remoteMemoryCache = state;
+      await setCacheItem('github-library-data', state).catch(() => {});
+      localStorage.removeItem(remoteKey);
+    }
+  } catch { /* ignore */ }
+  if (!remoteMemoryCache) remoteMemoryCache = blankState();
+}
+
+const remoteCacheInit = loadRemoteCache();
+
 function readState(): LocalLibraryState {
   return readLibraryState(key);
 }
@@ -61,7 +83,7 @@ function readLibraryState(storageKey: string): LocalLibraryState {
 }
 
 function writeState(state: LocalLibraryState, storageKey = key) {
-  localStorage.setItem(storageKey, JSON.stringify(state));
+  safeWriteStorage(storageKey, state);
 }
 
 function readRemoteMeta(): RemoteMeta {
@@ -106,7 +128,7 @@ function localStories() {
 }
 
 function remoteState() {
-  return readLibraryState(remoteKey);
+  return remoteMemoryCache ?? blankState();
 }
 
 function remoteStories() {
@@ -362,7 +384,7 @@ function appUpdateFromIndex(index: UpdateIndex) {
   };
 }
 
-function writeRemoteStories(stories: BundledStory[]) {
+async function writeRemoteStories(stories: BundledStory[]) {
   const state = blankState();
   let chapterCount = 0;
 
@@ -378,7 +400,8 @@ function writeRemoteStories(stories: BundledStory[]) {
     }
   }
 
-  writeState(state, remoteKey);
+  remoteMemoryCache = state;
+  await setCacheItem('github-library-data', state);
   window.dispatchEvent(new Event('leafnovel:local-library-updated'));
   return { storyCount: stories.length, chapterCount };
 }
@@ -421,12 +444,15 @@ export const localLibrary = {
     return (await bundledStories()).find((item) => item.story.id === storyId)?.chapters ?? [];
   },
   async stories(base: Story[] = []) {
+    await remoteCacheInit;
     return mergeStories(mergeStories(mergeStories(base, await this.bundledStories()), remoteStories()), localStories());
   },
   async chapters(storyId: string, base: Chapter[] = []) {
+    await remoteCacheInit;
     return mergeChapters(mergeChapters(base, remoteChapters(storyId)), localChapters(storyId));
   },
-  chapter(storyId: string, chapterNumber: number): ChapterContent | null {
+  async chapter(storyId: string, chapterNumber: number): Promise<ChapterContent | null> {
+    await remoteCacheInit;
     return readState().chapters[storyId]?.[chapterNumber] ?? remoteState().chapters[storyId]?.[chapterNumber] ?? null;
   },
   async bundledChapter(storyId: string, chapterNumber: number): Promise<ChapterContent | null> {
@@ -527,6 +553,7 @@ export const localLibrary = {
     return { storyCount: groups.size, chapterCount };
   },
   async syncRemote(updateUrl: string) {
+    await remoteCacheInit;
     const cleanUrl = updateUrl.trim();
     if (!cleanUrl) return { storyCount: 0, chapterCount: 0, skipped: true, dataUpdated: false, appUpdate: null };
     const cacheBust = `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
@@ -549,13 +576,13 @@ export const localLibrary = {
       const archiveSha = index.sha256 ? await sha256Hex(archive) : '';
       if (index.sha256 && archiveSha && archiveSha !== index.sha256) throw new Error('Pack checksum mismatch');
       const stories = await storiesFromPack(archive);
-      const result = writeRemoteStories(stories);
+      const result = await writeRemoteStories(stories);
       writeRemoteMeta({ dataVersion: index.dataVersion, updatedAt: new Date().toISOString() });
       return { ...result, skipped: false, dataUpdated: true, appUpdate };
     }
 
     const stories = normalizeRemoteStories(data, cleanUrl);
-    const result = writeRemoteStories(stories);
+    const result = await writeRemoteStories(stories);
     return { ...result, skipped: false, dataUpdated: true, appUpdate };
   },
 };
