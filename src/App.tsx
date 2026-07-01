@@ -46,6 +46,7 @@ type Route =
 const now = () => new Date().toISOString();
 let remoteSyncPromise: Promise<unknown> | null = null;
 let lastRemoteSync = 0;
+const triggeredImageKey = 'leafnovel:triggered-images';
 
 function parseRoute(pathname = window.location.pathname): Route {
   const parts = pathname.split('/').filter(Boolean);
@@ -63,6 +64,26 @@ function parseRoute(pathname = window.location.pathname): Route {
 function navigate(path: string) {
   window.history.pushState({ app: true }, '', path);
   window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
+function readStringSet(key: string) {
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set<string>(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function hasStoredFlag(key: string, value: string) {
+  return readStringSet(key).has(value);
+}
+
+function addStoredFlag(key: string, value: string) {
+  const next = readStringSet(key);
+  next.add(value);
+  localStorage.setItem(key, JSON.stringify(Array.from(next)));
 }
 
 function useRoute() {
@@ -825,7 +846,15 @@ function ReaderPage({ storyId, chapterNumber }: { storyId: string; chapterNumber
         <div className="space-y-6">
           {blocks.map((block, index) => {
             if (block.type === 'image') {
-              return <TriggeredImage key={`${block.src}-${index}`} src={block.src} alt={block.alt} effect={block.effect} />;
+              return (
+                <TriggeredImage
+                  key={`${block.src}-${index}`}
+                  triggerId={`${storyId}:${chapterNumber}:${index}:${block.src}`}
+                  src={block.src}
+                  alt={block.alt}
+                  effect={block.effect}
+                />
+              );
             }
 
             const dialogueClass = block.type === 'dialogue' && settings.dialogueColors ? 'reader-dialogue' : '';
@@ -878,31 +907,61 @@ function ReaderPage({ storyId, chapterNumber }: { storyId: string; chapterNumber
   );
 }
 
-function TriggeredImage({ src, alt, effect = 'none' }: { src: string; alt: string; effect?: string }) {
+function TriggeredImage({ triggerId, src, alt, effect = 'none' }: { triggerId: string; src: string; alt: string; effect?: string }) {
   const ref = useRef<HTMLImageElement | null>(null);
   const [triggered, setTriggered] = useState(false);
   const normalizedEffect = effect || 'none';
 
   useEffect(() => {
     const image = ref.current;
-    if (!image) return undefined;
+    if (!image || hasStoredFlag(triggeredImageKey, triggerId)) return undefined;
     let timeout = 0;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting || normalizedEffect === 'none') return;
-        window.clearTimeout(timeout);
-        setTriggered(true);
-        if ('vibrate' in navigator) navigator.vibrate?.(normalizedEffect === 'shake' ? [25, 35, 25] : 18);
-        timeout = window.setTimeout(() => setTriggered(false), 1100);
-      },
-      { rootMargin: '18% 0px -8% 0px', threshold: 0.12 },
-    );
-    observer.observe(image);
+    let armed = true;
+
+    const runTrigger = () => {
+      addStoredFlag(triggeredImageKey, triggerId);
+      window.clearTimeout(timeout);
+      setTriggered(true);
+      if ('vibrate' in navigator) navigator.vibrate?.(normalizedEffect === 'shake' ? [28, 34, 28] : 20);
+      playImageCue(normalizedEffect);
+      timeout = window.setTimeout(() => setTriggered(false), 1100);
+    };
+
+    const checkEdge = () => {
+      if (normalizedEffect === 'none') return;
+      const rect = image.getBoundingClientRect();
+      const topEdge = 24;
+      const rearmDistance = 120;
+      const imageVisible = rect.bottom > 0 && rect.top < window.innerHeight;
+
+      if (rect.top > rearmDistance || rect.bottom < -rearmDistance) {
+        armed = true;
+        return;
+      }
+
+      if (armed && imageVisible && rect.top <= topEdge && rect.top >= -topEdge) {
+        armed = false;
+        runTrigger();
+      }
+    };
+
+    let frame = 0;
+    const onScroll = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(checkEdge);
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    checkEdge();
+
     return () => {
       window.clearTimeout(timeout);
-      observer.disconnect();
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
     };
-  }, [normalizedEffect]);
+  }, [normalizedEffect, triggerId]);
 
   return (
     <figure className="reader-image-wrap">
@@ -910,6 +969,35 @@ function TriggeredImage({ src, alt, effect = 'none' }: { src: string; alt: strin
       {alt && <figcaption>{alt}</figcaption>}
     </figure>
   );
+}
+
+function playImageCue(effect: string) {
+  try {
+    const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const context = new AudioContextClass();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const nowTime = context.currentTime;
+    const frequency = effect === 'flash' ? 820 : effect === 'blur' ? 180 : 360;
+
+    oscillator.type = effect === 'shake' ? 'sawtooth' : 'sine';
+    oscillator.frequency.setValueAtTime(frequency, nowTime);
+    oscillator.frequency.exponentialRampToValueAtTime(Math.max(80, frequency * 0.55), nowTime + 0.12);
+    gain.gain.setValueAtTime(0.0001, nowTime);
+    gain.gain.exponentialRampToValueAtTime(0.045, nowTime + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, nowTime + 0.16);
+
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(nowTime);
+    oscillator.stop(nowTime + 0.18);
+    oscillator.onended = () => {
+      context.close().catch(() => undefined);
+    };
+  } catch {
+    // Audio can be blocked until the first user gesture; the visual effect still runs.
+  }
 }
 
 function ReaderProgressFooter({
